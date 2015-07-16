@@ -5,6 +5,8 @@ import subprocess
 import shutil
 import time
 import bitcoin.rpc
+import requests
+import json
 
 def main():
     def rpcPort(i):

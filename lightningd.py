@@ -8,35 +8,30 @@ import daemon
 from configparser import ConfigParser
 import os
 import os.path
+from flask import Flask
+from flask import request
+from jsonrpc.backend.flask import api
 
-class GetHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        parsed_path = urllib.parse.urlparse(self.path)
-        message_parts = [
-                'CLIENT VALUES:',
-                'client_address=%s (%s)' % (self.client_address,
-                                            self.address_string()),
-                'command=%s' % self.command,
-                'path=%s' % self.path,
-                'real path=%s' % parsed_path.path,
-                'query=%s' % parsed_path.query,
-                'request_version=%s' % self.request_version,
-                '',
-                'SERVER VALUES:',
-                'server_version=%s' % self.server_version,
-                'sys_version=%s' % self.sys_version,
-                'protocol_version=%s' % self.protocol_version,
-                '',
-                'HEADERS RECEIVED:',
-                ]
-        for name, value in sorted(self.headers.items()):
-            message_parts.append('%s=%s' % (name, value.rstrip()))
-        message_parts.append('')
-        message = '\r\n'.join(message_parts)
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(bytes(message, 'UTF-8'))
-        return
+app = Flask(__name__)
+app.register_blueprint(api.as_blueprint())
+
+@api.dispatcher.add_method
+def echo(*args, **kwargs):
+    """Echo parameters"""
+    return args, kwargs
+
+
+def shutdown_server():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    func()
+
+@api.dispatcher.add_method
+def stop():
+    """Stop the server"""
+    shutdown_server()
+    return "Shutting down..."
 
 def main():
     parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
@@ -80,8 +75,7 @@ def main():
 
     def run():
         rpcport = config.getint('rpcport')
-        server = HTTPServer(('localhost', rpcport), GetHandler)
-        server.serve_forever()
+        app.run(port=rpcport)
 
     if config.getboolean('daemon'):
         logPath = os.path.join(args.datadir, 'lightning.log')
