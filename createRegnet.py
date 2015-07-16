@@ -36,7 +36,7 @@ def main():
 
     regnetDir = os.path.abspath('regnet')
     os.mkdir(regnetDir)
-    nodes = ['Alice', 'Bob', 'Carol']
+    nodes = sorted(['Alice', 'Bob', 'Carol'])
     for i in range(len(nodes)):
         node = nodes[i]
         nodeDir = os.path.join(regnetDir, node)

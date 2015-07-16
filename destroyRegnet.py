@@ -4,19 +4,24 @@ import os
 import subprocess
 import shutil
 import time
+import bitcoin.rpc
 
 def main():
-    bitcoincli = os.path.abspath('bitcoin-cli')
-    assert os.path.isfile(bitcoincli)
+    def rpcPort(i):
+        return 18412 + 10 * i
 
     regnetDir = os.path.abspath('regnet')
     if not os.path.isdir(regnetDir):
         return
     
-    for node in os.listdir(regnetDir):
+    nodes = sorted(os.listdir(regnetDir))
+    for i in range(len(nodes)):
+        node = nodes[i]
         nodeDir = os.path.join(regnetDir, node)
         assert os.path.isdir(nodeDir)
-        subprocess.call([bitcoincli, "-datadir=%s" % nodeDir, "stop"])
+        proxy = bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' %
+                                  (node, node, rpcPort(i)))
+        proxy.stop()
 
     time.sleep(1)
     shutil.rmtree(regnetDir)
