@@ -65,7 +65,7 @@ def main():
                 })
                 #Connect in a chain
                 if lastNode is not None:
-                    f.write("connect=localhost:%d\n" % lastNode[1][1]) # rpcport
+                    f.write("connect=localhost:%d\n" % lastNode[1][0]) # port
 
             with open(os.path.join(nodeDir, 'lightning.conf'), 'w') as f:
                 f.write(lightningConfiguration % {

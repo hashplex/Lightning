@@ -3,6 +3,8 @@ from flask import request
 from jsonrpc.backend.flask import api
 import bitcoin.rpc
 import jsonrpcproxy
+import config
+import json
 
 app = Flask(__name__)
 app.register_blueprint(api.as_blueprint())
@@ -24,7 +26,6 @@ def stop():
     shutdown_server()
     return "Shutting down..."
 
-global log
 log = ""
 
 @app.route('/log')
@@ -46,6 +47,17 @@ def error():
 def die():
     shutdown_server()
 
+@app.route('/info')
+def info():
+    return str(bitcoind.getinfo())
+
 def run(conf):
+    global bitcoind
+    bitcoinConfig = config.bitcoin(datadir=conf['datadir'])
+    bitcoind = bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' %
+                                 (bitcoinConfig.get('rpcuser'), 
+                                  bitcoinConfig.get('rpcpassword'),
+                                  bitcoinConfig.getint('rpcport')))
+
     rpcport = conf.getint('rpcport')
     app.run(port=rpcport, debug=conf.getboolean('debug'), use_reloader=False)
