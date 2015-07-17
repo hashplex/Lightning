@@ -31,7 +31,7 @@ def main():
             print("Connection refused, assume stopped")
         
         lightningConfig = config.lightning(datadir=nodeDir)
-        lproxy = jsonrpcproxy.Proxy('http://a:a@localhost:%d' %
+        lproxy = jsonrpcproxy.Proxy('http://localhost:%d' %
                                     (lightningConfig.getint('rpcport'),))
         try:
             lproxy.stop()

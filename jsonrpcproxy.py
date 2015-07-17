@@ -15,10 +15,11 @@ class Proxy(object):
         self.headers = {'content-type': 'application/json'}
         self._id = 0
 
-    def _call(self, name, *args):
+    def _call(self, name, *args, **kwargs):
+        assert not (args and kwargs)
         payload = {
             'method': name,
-            'params': args,
+            'params': kwargs or args,
             'id': self._id,
             'jsonrpc': '2.0'
         }

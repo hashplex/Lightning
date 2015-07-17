@@ -28,6 +28,7 @@ port=%(port)d
 lightningConfiguration = """\
 # Lightning configuration for %(node)s
 daemon=1
+debug=1
 
 rpcport=%(rpcport)d
 port=%(port)d
@@ -39,7 +40,6 @@ def main():
     
     walletnotify = os.path.abspath('walletnotify.sh')
     assert os.path.isfile(walletnotify)
-
     bitcoind = os.path.abspath('bitcoind')
     assert os.path.isfile(bitcoind)
     lightningd = os.path.abspath('lightningd.py')
