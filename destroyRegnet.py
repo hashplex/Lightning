@@ -7,23 +7,36 @@ import time
 import bitcoin.rpc
 import requests
 import json
+from configparser import ConfigParser
+import config
+import jsonrpcproxy
 
 def main():
-    def rpcPort(i):
-        return 18412 + 10 * i
-
     regnetDir = os.path.abspath('regnet')
     if not os.path.isdir(regnetDir):
         return
     
-    nodes = sorted(os.listdir(regnetDir))
-    for i in range(len(nodes)):
-        node = nodes[i]
+    for node in os.listdir(regnetDir):
         nodeDir = os.path.join(regnetDir, node)
         assert os.path.isdir(nodeDir)
+        
+        bitcoinConfig = config.bitcoin(datadir=nodeDir)
         proxy = bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' %
-                                  (node, node, rpcPort(i)))
-        proxy.stop()
+                                  (bitcoinConfig.get('rpcuser'), 
+                                   bitcoinConfig.get('rpcpassword'),
+                                   bitcoinConfig.getint('rpcport')))
+        try:
+            proxy.stop()
+        except ConnectionRefusedError:
+            print("Connection refused, assume stopped")
+        
+        lightningConfig = config.lightning(datadir=nodeDir)
+        lproxy = jsonrpcproxy.Proxy('http://a:a@localhost:%d' %
+                                    (lightningConfig.getint('rpcport'),))
+        try:
+            lproxy.stop()
+        except requests.exceptions.ConnectionError:
+            print("Lightning connection refused, assume stopped")
 
     time.sleep(1)
     shutil.rmtree(regnetDir)

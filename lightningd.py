@@ -11,6 +11,7 @@ import os.path
 from flask import Flask
 from flask import request
 from jsonrpc.backend.flask import api
+import config
 
 app = Flask(__name__)
 app.register_blueprint(api.as_blueprint())
@@ -48,36 +49,20 @@ def main():
     parser.add_argument('-rpcport')
     
     args = parser.parse_args()
-    confPath = os.path.join(args.datadir, args.conf)
     print(args)
     
-    config = ConfigParser()
-    config.read_dict({'config':{
-        'daemon':False,
-        'rpcport':9332,
-        'port':9333
-    }})
-
-    if os.path.isfile(confPath):
-        with open('lightning.conf') as f:
-            confData = f.read()
-        config.read_string('[config]\n' + confData)
-        assert config.sections() == ['config']
-    else:
-        print("No configuration file found")
-    
-    config.read_dict({'config': vars(args)})
-
-    config = config['config']
+    conf = config.lightning(args=vars(args), 
+                            datadir=args.datadir, 
+                            conf=args.conf)
     
     print("Starting Lightning server")
-    print(dict(config))
+    print(dict(conf))
 
     def run():
-        rpcport = config.getint('rpcport')
+        rpcport = conf.getint('rpcport')
         app.run(port=rpcport)
 
-    if config.getboolean('daemon'):
+    if conf.getboolean('daemon'):
         logPath = os.path.join(args.datadir, 'lightning.log')
         out = open(logPath, 'a')
         with daemon.DaemonContext(stdout=out, stderr=out):
