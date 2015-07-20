@@ -18,7 +18,6 @@ txindex=1
 daemon=1
 listen=1
 
-walletnotify=%(walletnotify)s %(node)s %%s
 rpcuser=%(node)s
 rpcpassword=%(password)s
 rpcport=%(rpcport)d
@@ -39,8 +38,6 @@ def main():
     ports = ((18412 + i, 18414 + i, 18416 + i, 18418 + i)
              for i in itertools.count(0, 10))
     
-    walletnotify = os.path.abspath('walletnotify.sh')
-    assert os.path.isfile(walletnotify)
     bitcoind = os.path.abspath('bitcoind')
     assert os.path.isfile(bitcoind)
     lightningd = os.path.abspath('lightningd.py')
@@ -62,7 +59,6 @@ def main():
                     'password': node, # insecure, but this is regtest
                     'rpcport': rpcport,
                     'port': port,
-                    'walletnotify': walletnotify,
                 })
                 #Connect in a chain
                 if lastNode is not None:
