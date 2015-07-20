@@ -1,45 +1,45 @@
 #! /usr/bin/env python3
+
+"""Parse configuration and start lightningserver."""
+
 import argparse
 import daemon
-from configparser import ConfigParser
-import os
 import os.path
 import config
-import urllib.parse
-import time
 
 def run(conf):
+    """Start lightningserver"""
     import lightningserver
     lightningserver.run(conf)
-    
+
 def main():
+    """Parse configuration, then start the server."""
     parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
-    def addSwitch(name):
+    def add_switch(name):
+        """Set up command line arguments to turn a switch on and off."""
         group = parser.add_mutually_exclusive_group()
         group.add_argument('-'+name, dest=name, action='store_true')
         group.add_argument('-no'+name, dest=name, action='store_false')
-    # TODO: change by OS
-    datadirDefault = os.path.expanduser('~/.bitcoin')
-    parser.add_argument('-datadir', default=datadirDefault)
+    parser.add_argument('-datadir', default=config.DEFAULT_DATADIR)
     parser.add_argument('-conf', default='lightning.conf')
-    addSwitch('daemon')
-    addSwitch('debug')
+    add_switch('daemon')
+    add_switch('debug')
     parser.add_argument('-port')
     parser.add_argument('-rpcport')
-    
+
     args = parser.parse_args()
     print(args)
-    
-    conf = config.lightning(args=vars(args), 
-                            datadir=args.datadir, 
+
+    conf = config.lightning(args=vars(args),
+                            datadir=args.datadir,
                             conf=args.conf)
-    
+
     print("Starting Lightning server")
     print(dict(conf))
 
     if conf.getboolean('daemon'):
-        logPath = os.path.join(args.datadir, 'lightning.log')
-        out = open(logPath, 'a')
+        log_path = os.path.join(args.datadir, 'lightning.log')
+        out = open(log_path, 'a')
         infile = open('/dev/null')
         with daemon.DaemonContext(stdout=out, stderr=out, stdin=infile):
             run(conf)

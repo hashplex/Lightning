@@ -1,16 +1,17 @@
 #! /usr/bin/env python3
 
+"""Setup a regtest environment for testing and development."""
+
 import os
 import os.path
 import subprocess
-from textwrap import dedent
 import itertools
 import shutil
 
-import destroyRegnet
-destroyRegnet.main()
+import destroy_regnet
+destroy_regnet.main()
 
-bitcoinConfiguration = """\
+BITCOIN_CONFIGURATION = """\
 # Configuration for %(node)s
 testnet=0
 regtest=1
@@ -24,7 +25,7 @@ rpcport=%(rpcport)d
 port=%(port)d
 """
 
-lightningConfiguration = """\
+LIGHTNING_CONFIGURATION = """\
 # Lightning configuration for %(node)s
 daemon=1
 debug=1
@@ -35,49 +36,50 @@ port=%(port)d
 """
 
 def main():
-    ports = ((18412 + i, 18414 + i, 18416 + i, 18418 + i)
+    """Set up a regtest network in regnet."""
+    ports = ((18412 + i, 18414 + i, 18416 + i)
              for i in itertools.count(0, 10))
-    
+
     bitcoind = os.path.abspath('bitcoind')
     assert os.path.isfile(bitcoind)
     lightningd = os.path.abspath('lightningd.py')
     assert os.path.isfile(lightningd)
 
-    regnetDir = os.path.abspath('regnet')
-    assert not os.path.exists(regnetDir)
-    os.mkdir(regnetDir)
+    regnet_dir = os.path.abspath('regnet')
+    assert not os.path.exists(regnet_dir)
+    os.mkdir(regnet_dir)
     nodes = zip(['Alice', 'Bob', 'Carol'], ports)
-    lastNode = None
+    last_node = None
     for node, ports in nodes:
-        port, rpcport, lport, lrpcport = ports
-        nodeDir = os.path.join(regnetDir, node)
-        os.mkdir(nodeDir)
+        port, rpcport, lport = ports
+        node_dir = os.path.join(regnet_dir, node)
+        os.mkdir(node_dir)
         try:
-            with open(os.path.join(nodeDir, 'bitcoin.conf'), 'w') as f:
-                f.write(bitcoinConfiguration % {
+            with open(os.path.join(node_dir, 'bitcoin.conf'), 'w') as conf:
+                conf.write(BITCOIN_CONFIGURATION % {
                     'node': node,
                     'password': node, # insecure, but this is regtest
                     'rpcport': rpcport,
                     'port': port,
                 })
                 #Connect in a chain
-                if lastNode is not None:
-                    f.write("connect=localhost:%d\n" % lastNode[1][0]) # port
+                if last_node is not None:
+                    conf.write("connect=localhost:%d\n" % last_node[1][0])
 
-            with open(os.path.join(nodeDir, 'lightning.conf'), 'w') as f:
-                f.write(lightningConfiguration % {
+            with open(os.path.join(node_dir, 'lightning.conf'), 'w') as conf:
+                conf.write(LIGHTNING_CONFIGURATION % {
                     'node': node,
                     'password': node, # also insecure
                     'port': lport,
                 })
 
-            lastNode = (node, ports)
+            last_node = (node, ports)
         except:
             print("Failed")
-            shutil.rmtree(nodeDir)
+            shutil.rmtree(node_dir)
             raise
-        subprocess.check_call([bitcoind, "-datadir=%s" % nodeDir])
-        subprocess.check_call([lightningd, "-datadir=%s" % nodeDir])
+        subprocess.check_call([bitcoind, "-datadir=%s" % node_dir])
+        subprocess.check_call([lightningd, "-datadir=%s" % node_dir])
 
 if __name__ == "__main__":
     main()
