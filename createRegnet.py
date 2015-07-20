@@ -30,7 +30,8 @@ lightningConfiguration = """\
 daemon=1
 debug=1
 
-rpcport=%(rpcport)d
+rpcuser=%(node)s
+rpcpassword=%(password)s
 port=%(port)d
 """
 
@@ -70,8 +71,8 @@ def main():
             with open(os.path.join(nodeDir, 'lightning.conf'), 'w') as f:
                 f.write(lightningConfiguration % {
                     'node': node,
+                    'password': node, # also insecure
                     'port': lport,
-                    'rpcport': lrpcport,
                 })
 
             lastNode = (node, ports)

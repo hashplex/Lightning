@@ -24,9 +24,8 @@ class Proxy(object):
             'jsonrpc': '2.0'
         }
 
-        response = requests.post(
-            self.url, data=json.dumps(payload), headers=self.headers).json()
-
+        response = self._request(json.dumps(payload))
+        
         assert response["jsonrpc"] == "2.0"
         assert response["id"] == self._id
 
@@ -39,6 +38,9 @@ class Proxy(object):
                 'code': -343, 'message': 'missing JSON-RPC result'})
         else:
             return response['result']
+
+    def _request(self, data):
+        return requests.post(self.url, data=data, headers=self.headers).json()
 
     # copied from python-bitcoinlib
     def __getattr__(self, name):
@@ -53,3 +55,12 @@ class Proxy(object):
         # bitcoin.rpc.<lambda>>
         f.__name__ = name
         return f
+
+class AuthProxy(Proxy):
+    def __init__(self, url, auth):
+        Proxy.__init__(self, url)
+        self.auth = auth
+
+    def _request(self, data):
+        return requests.post(
+            self.url, data=data, headers=self.headers, auth=self.auth).json()

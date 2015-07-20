@@ -34,7 +34,6 @@ def bitcoin(args=None, datadir=defaultDatadir, conf="bitcoin.conf"):
 
 lightningDefaults = {
     'daemon':False,
-    'rpcport':9332,
     'port':9333,
 }
 def lightning(args=None, datadir=defaultDatadir, conf="lightning.conf"):
