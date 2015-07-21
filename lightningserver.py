@@ -13,11 +13,12 @@ import os
 import os.path
 
 # Copied from http://flask.pocoo.org/snippets/8/
-def check_auth(supplied_username, supplied_password):
+def check_auth(username, password):
     """This function is called to check if a username /
     password combination is valid.
     """
-    return supplied_username == username and supplied_password == password
+    return (username == app.config['rpcuser'] and
+            password == app.config['rpcpassword'])
 
 def authenticate():
     """Sends a 401 response that enables basic auth"""
@@ -44,7 +45,7 @@ def requires_auth(view):
 PUBLICAPI = JSONRPCAPI()
 PRIVATEAPI = JSONRPCAPI()
 
-app = Flask(__name__)
+app = Flask(__name__) # pylint: disable=invalid-name
 app.add_url_rule('/', 'PUBLICAPI', PUBLICAPI.as_view(), methods=['POST'])
 app.add_url_rule('/local/', 'PRIVATEAPI', requires_auth(PRIVATEAPI.as_view()),
                  methods=['POST'])
@@ -70,7 +71,7 @@ def stop():
 @PUBLICAPI.dispatcher.add_method
 def info():
     """Get bitcoind info."""
-    return bitcoind.getinfo()
+    return app.config['bitcoind'].getinfo()
 
 @app.route('/error')
 def error():
@@ -92,7 +93,7 @@ def die():
 @app.route('/info')
 def infoweb():
     """Get bitcoind info."""
-    return str(bitcoind.getinfo())
+    return str(app.config['bitcoind'].getinfo())
 
 @app.route('/otherinfo')
 def otherinfo():
@@ -107,11 +108,8 @@ def run(conf):
     with open(os.path.join(conf['datadir'], conf['pidfile']), 'w') as pid_file:
         pid_file.write(str(os.getpid()))
 
-    # TODO: store on application object
-    global bitcoind
-    bitcoind = config.bitcoin_proxy(datadir=conf['datadir'])
+    app.config.update(conf)
+    app.config['bitcoind'] = config.bitcoin_proxy(datadir=conf['datadir'])
 
-    global username, password
-    username, password = conf.get('rpcuser'), conf.get('rpcpassword')
     port = conf.getint('port')
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False)
