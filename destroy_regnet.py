@@ -4,11 +4,20 @@
 
 import os
 import shutil
+import signal
 import time
-import bitcoin.rpc
-import requests
-import config
-import jsonrpcproxy
+
+def stop(pid_path):
+    """Stop a process specified in a pid file."""
+    if not os.path.isfile(pid_path):
+        print(pid_path, "Not found")
+    else:
+        with open(pid_path) as pid_file:
+            pid = int(pid_file.read())
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
 
 def main():
     """Clean up regnet."""
@@ -20,21 +29,11 @@ def main():
         node_dir = os.path.join(regnet_dir, node)
         assert os.path.isdir(node_dir)
 
-        proxy = config.bitcoin_proxy(datadir=node_dir)
-        try:
-            proxy.stop()
-        except ConnectionRefusedError:
-            print("Connection refused, assume stopped")
+        stop(os.path.join(node_dir, 'regtest', 'bitcoind.pid'))
+        stop(os.path.join(node_dir, 'lightning.pid'))
 
-        lproxy = config.lightning_proxy(datadir=node_dir)
-        try:
-            lproxy.stop()
-        except requests.exceptions.ConnectionError:
-            print("Lightning connection refused, assume stopped")
-
+    shutil.rmtree(regnet_dir, ignore_errors=True)
     time.sleep(1)
-    #os.remove(regnet_dir+'/Carol/regtest/wallet.dat')
-    shutil.rmtree(regnet_dir)
 
 if __name__ == "__main__":
     main()

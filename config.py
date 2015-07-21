@@ -40,7 +40,7 @@ def bitcoin_config(args=None, datadir=DEFAULT_DATADIR, conf="bitcoin.conf"):
 def bitcoin_proxy(args=None, datadir=DEFAULT_DATADIR, conf="bitcoin.conf"):
     """Return a bitcoin proxy pointing to the config."""
     bitcoin_conf = bitcoin_config(args, datadir, conf)
-    return bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' % 
+    return bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' %
                              (bitcoin_conf.get('rpcuser'),
                               bitcoin_conf.get('rpcpassword'),
                               bitcoin_conf.getint('rpcport')))
@@ -48,6 +48,7 @@ def bitcoin_proxy(args=None, datadir=DEFAULT_DATADIR, conf="bitcoin.conf"):
 LIGHTNING_DEFAULTS = {
     'daemon':False,
     'port':9333,
+    'pidfile':'lightning.pid',
 }
 def lightning_config(args=None,
                      datadir=DEFAULT_DATADIR,

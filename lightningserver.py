@@ -9,6 +9,8 @@ import json
 from functools import wraps
 from flask import Response
 from jsonrpc.backend.flask import JSONRPCAPI
+import os
+import os.path
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(supplied_username, supplied_password):
@@ -101,10 +103,14 @@ def otherinfo():
 
 def run(conf):
     """Start the server."""
+
+    with open(os.path.join(conf['datadir'], conf['pidfile']), 'w') as pid_file:
+        pid_file.write(str(os.getpid()))
+
     # TODO: store on application object
     global bitcoind
     bitcoind = config.bitcoin_proxy(datadir=conf['datadir'])
-    
+
     global username, password
     username, password = conf.get('rpcuser'), conf.get('rpcpassword')
     port = conf.getint('port')

@@ -7,10 +7,12 @@ import os.path
 import subprocess
 import itertools
 import shutil
-import jsonrpcproxy
 import config
 import destroy_regnet
 import time
+import bitcoin.rpc
+import bitcoin
+bitcoin.SelectParams('regtest')
 
 BITCOIN_CONFIGURATION = """\
 # Configuration for %(node)s
@@ -51,6 +53,7 @@ def main():
     regnet_dir = os.path.abspath('regnet')
     assert not os.path.exists(regnet_dir)
     os.mkdir(regnet_dir)
+
     nodes = zip(['Alice', 'Bob', 'Carol'], ports)
     last_node = None
     proxies = []
@@ -58,6 +61,7 @@ def main():
         port, rpcport, lport = ports
         node_dir = os.path.join(regnet_dir, node)
         os.mkdir(node_dir)
+
         try:
             with open(os.path.join(node_dir, 'bitcoin.conf'), 'w') as conf:
                 conf.write(BITCOIN_CONFIGURATION % {
@@ -82,11 +86,28 @@ def main():
             print("Failed")
             shutil.rmtree(node_dir)
             raise
-        subprocess.check_call([bitcoind, "-datadir=%s" % node_dir])
-        subprocess.check_call([lightningd, "-datadir=%s" % node_dir])
-        proxies.append((config.bitcoin_proxy(datadir=node_dir), 
+        with open(os.path.join(node_dir, 'log.txt'), 'a') as log_file:
+            subprocess.check_call([bitcoind, "-datadir=%s" % node_dir],
+                                  stdin=subprocess.DEVNULL,
+                                  stdout=log_file,
+                                  stderr=subprocess.STDOUT)
+            subprocess.check_call([lightningd, "-datadir=%s" % node_dir],
+                                  stdin=subprocess.DEVNULL,
+                                  stdout=log_file,
+                                  stderr=subprocess.STDOUT)
+        proxies.append((config.bitcoin_proxy(datadir=node_dir),
                         config.lightning_proxy(datadir=node_dir)))
-    time.sleep(3)
+    def loading_wallet(proxy):
+        """Check if bitcoind has finished loading."""
+        try:
+            proxy.getinfo()
+        except bitcoin.rpc.JSONRPCException as error:
+            if error.error['code'] == -28:
+                return True
+        return False
+    time.sleep(1)
+    while any(loading_wallet(proxy) for proxy, lproxy in proxies):
+        time.sleep(1)
     return proxies
 
 if __name__ == "__main__":

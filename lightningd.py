@@ -6,6 +6,7 @@ import argparse
 import daemon
 import os.path
 import config
+import daemon.pidfile
 
 def run(conf):
     """Start lightningserver"""
