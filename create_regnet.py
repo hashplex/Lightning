@@ -56,7 +56,6 @@ def main():
 
     nodes = zip(['Alice', 'Bob', 'Carol'], ports)
     last_node = None
-    proxies = []
     for node, ports in nodes:
         port, rpcport, lport = ports
         node_dir = os.path.join(regnet_dir, node)
@@ -87,6 +86,7 @@ def main():
             shutil.rmtree(node_dir)
             raise
         with open(os.path.join(node_dir, 'log.txt'), 'a') as log_file:
+            #log_file = None
             subprocess.check_call([bitcoind, "-datadir=%s" % node_dir],
                                   stdin=subprocess.DEVNULL,
                                   stdout=log_file,
@@ -95,8 +95,6 @@ def main():
                                   stdin=subprocess.DEVNULL,
                                   stdout=log_file,
                                   stderr=subprocess.STDOUT)
-        proxies.append((config.bitcoin_proxy(datadir=node_dir),
-                        config.lightning_proxy(datadir=node_dir)))
     def loading_wallet(proxy):
         """Check if bitcoind has finished loading."""
         try:
@@ -106,7 +104,9 @@ def main():
                 return True
         return False
     time.sleep(1)
-    while any(loading_wallet(proxy) for proxy, lproxy in proxies):
+    proxies = [config.ProxySet(os.path.join(regnet_dir, node))
+               for node in os.listdir(regnet_dir)]
+    while any(loading_wallet(proxy.b) for proxy in proxies):
         time.sleep(1)
     return proxies
 

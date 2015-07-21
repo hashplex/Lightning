@@ -5,7 +5,6 @@
 import os
 import shutil
 import signal
-import time
 
 def stop(pid_path):
     """Stop a process specified in a pid file."""
@@ -15,7 +14,7 @@ def stop(pid_path):
         with open(pid_path) as pid_file:
             pid = int(pid_file.read())
         try:
-            os.kill(pid, signal.SIGTERM)
+            os.kill(pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
 
@@ -33,7 +32,6 @@ def main():
         stop(os.path.join(node_dir, 'lightning.pid'))
 
     shutil.rmtree(regnet_dir, ignore_errors=True)
-    time.sleep(1)
 
 if __name__ == "__main__":
     main()

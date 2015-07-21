@@ -56,7 +56,7 @@ class Proxy(object): # pylint: disable=too-few-public-methods
             raise AttributeError
 
         # Create a callable to do the actual call
-        func = lambda *args: self._call(name, *args)
+        func = lambda *args, **kwargs: self._call(name, *args, **kwargs)
 
         # Make debuggers show <function bitcoin.rpc.name> rather than <function
         # bitcoin.rpc.<lambda>>
