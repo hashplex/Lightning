@@ -30,6 +30,8 @@ port=%(port)d
 
 LIGHTNING_CONFIGURATION = """\
 # Lightning configuration for %(node)s
+testnet=0
+regtest=1
 daemon=1
 debug=0
 

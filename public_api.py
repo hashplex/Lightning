@@ -2,6 +2,7 @@
 
 import jsonrpcproxy
 from jsonrpc.backend.flask import JSONRPCAPI
+from flask import g
 
 API = JSONRPCAPI()
 
@@ -13,4 +14,4 @@ def echo(*args, **kwargs):
 @API.dispatcher.add_method
 def info():
     """Get bitcoind info."""
-    return app.config['bitcoind'].getinfo()
+    return g.config['bitcoind'].getinfo()

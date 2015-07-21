@@ -8,11 +8,11 @@ import config
 import json
 from functools import wraps
 from flask import Response
-from jsonrpc.backend.flask import JSONRPCAPI
 import os
 import os.path
 from private_api import API as PRIVATEAPI
 from public_api import API as PUBLICAPI
+from flask import g
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -48,6 +48,11 @@ app = Flask(__name__) # pylint: disable=invalid-name
 app.add_url_rule('/', 'PUBLICAPI', PUBLICAPI.as_view(), methods=['POST'])
 app.add_url_rule('/local/', 'PRIVATEAPI', requires_auth(PRIVATEAPI.as_view()),
                  methods=['POST'])
+
+@app.before_request
+def before_request():
+    """Set up g context."""
+    g.config = app.config
 
 def shutdown_server():
     """Stop the server."""
@@ -90,6 +95,11 @@ def run(conf):
 
     with open(os.path.join(conf['datadir'], conf['pidfile']), 'w') as pid_file:
         pid_file.write(str(os.getpid()))
+
+    if conf.getboolean('regtest'):
+        bitcoin.SelectParams('regtest')
+    else:
+        raise Exception("Non-regnet use not supported")
 
     app.config.update(conf)
     app.config['bitcoind'] = config.bitcoin_proxy(datadir=conf['datadir'])
