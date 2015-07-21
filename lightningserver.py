@@ -11,6 +11,7 @@ from flask import Response
 from jsonrpc.backend.flask import JSONRPCAPI
 import os
 import os.path
+from local_api import API as PRIVATEAPI
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -43,7 +44,6 @@ def requires_auth(view):
     return decorated
 
 PUBLICAPI = JSONRPCAPI()
-PRIVATEAPI = JSONRPCAPI()
 
 app = Flask(__name__) # pylint: disable=invalid-name
 app.add_url_rule('/', 'PUBLICAPI', PUBLICAPI.as_view(), methods=['POST'])
@@ -61,12 +61,6 @@ def shutdown_server():
     if func is None:
         raise RuntimeError('Not running with the Werkzeug Server')
     func()
-
-@PRIVATEAPI.dispatcher.add_method
-def stop():
-    """Stop the server."""
-    shutdown_server()
-    return "Shutting down..."
 
 @PUBLICAPI.dispatcher.add_method
 def info():

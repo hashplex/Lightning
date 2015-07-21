@@ -32,10 +32,10 @@ class TestBitcoind(unittest.TestCase):
         self.assertEqual(self.alice.bit.getbalance(), 100000000)
         self.assertEqual(self.bob.bit.getbalance(), 100000000)
 
-    @unittest.expectedFailure
+    #@unittest.expectedFailure
     def test_channel(self):
         """Test a payment channel."""
-        self.alice.lit.open(self.bob.lurl, 50000000, 25000000, 5000)
+        self.alice.lit.create(self.bob.lurl, 50000000, 25000000, 5000)
         self.assertEqual(self.alice.bit.getbalance(), 49995000)
         self.assertEqual(self.bob.bit.getbalance(), 74995000)
         self.assertEqual(self.alice.lit.getbalance(), 99995000)
