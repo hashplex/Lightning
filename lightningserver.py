@@ -11,7 +11,8 @@ from flask import Response
 from jsonrpc.backend.flask import JSONRPCAPI
 import os
 import os.path
-from local_api import API as PRIVATEAPI
+from private_api import API as PRIVATEAPI
+from public_api import API as PUBLICAPI
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -43,17 +44,10 @@ def requires_auth(view):
         return view(*args, **kwargs)
     return decorated
 
-PUBLICAPI = JSONRPCAPI()
-
 app = Flask(__name__) # pylint: disable=invalid-name
 app.add_url_rule('/', 'PUBLICAPI', PUBLICAPI.as_view(), methods=['POST'])
 app.add_url_rule('/local/', 'PRIVATEAPI', requires_auth(PRIVATEAPI.as_view()),
                  methods=['POST'])
-
-@PUBLICAPI.dispatcher.add_method
-def echo(*args, **kwargs):
-    """Echo parameters."""
-    return args, kwargs
 
 def shutdown_server():
     """Stop the server."""
@@ -61,11 +55,6 @@ def shutdown_server():
     if func is None:
         raise RuntimeError('Not running with the Werkzeug Server')
     func()
-
-@PUBLICAPI.dispatcher.add_method
-def info():
-    """Get bitcoind info."""
-    return app.config['bitcoind'].getinfo()
 
 @app.route('/error')
 def error():
