@@ -28,14 +28,14 @@ def main():
     parser.add_argument('-rpcport')
 
     args = parser.parse_args()
-    print(args)
+    #print(args)
 
-    conf = config.lightning(args=vars(args),
-                            datadir=args.datadir,
-                            conf=args.conf)
+    conf = config.lightning_config(args=vars(args),
+                                   datadir=args.datadir,
+                                   conf=args.conf)
 
-    print("Starting Lightning server")
-    print(dict(conf))
+    #print("Starting Lightning server")
+    #print(dict(conf))
 
     if conf.getboolean('daemon'):
         log_path = os.path.join(args.datadir, 'lightning.log')

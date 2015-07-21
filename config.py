@@ -4,6 +4,8 @@
 
 import os.path
 from configparser import ConfigParser
+import bitcoin.rpc
+import jsonrpcproxy
 
 # TODO: change by OS
 DEFAULT_DATADIR = os.path.expanduser("~/.bitcoin")
@@ -30,16 +32,34 @@ def get_config(args=None, path=None, defaults=None):
 BITCOIN_DEFAULTS = {
     # TODO: add default config
 }
-def bitcoin(args=None, datadir=DEFAULT_DATADIR, conf="bitcoin.conf"):
+def bitcoin_config(args=None, datadir=DEFAULT_DATADIR, conf="bitcoin.conf"):
     """Parse and return bitcoin config."""
     conf_path = os.path.join(datadir, conf)
     return get_config(args=args, path=conf_path, defaults=BITCOIN_DEFAULTS)
+
+def bitcoin_proxy(args=None, datadir=DEFAULT_DATADIR, conf="bitcoin.conf"):
+    """Return a bitcoin proxy pointing to the config."""
+    bitcoin_conf = bitcoin_config(args, datadir, conf)
+    return bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' % 
+                             (bitcoin_conf.get('rpcuser'),
+                              bitcoin_conf.get('rpcpassword'),
+                              bitcoin_conf.getint('rpcport')))
 
 LIGHTNING_DEFAULTS = {
     'daemon':False,
     'port':9333,
 }
-def lightning(args=None, datadir=DEFAULT_DATADIR, conf="lightning.conf"):
+def lightning_config(args=None,
+                     datadir=DEFAULT_DATADIR,
+                     conf="lightning.conf"):
     """Parse and return lightning config."""
     conf_path = os.path.join(datadir, conf)
     return get_config(args=args, path=conf_path, defaults=LIGHTNING_DEFAULTS)
+
+def lightning_proxy(args=None, datadir=DEFAULT_DATADIR, conf="lightning.conf"):
+    """Return a lightning proxy pointing to the config."""
+    lightning_conf = lightning_config(args, datadir, conf)
+    return jsonrpcproxy.AuthProxy(
+        'http://localhost:%d/local/' % lightning_conf.getint('port'),
+        (lightning_conf.get('rpcuser'),
+         lightning_conf.get('rpcpassword')))

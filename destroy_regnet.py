@@ -20,27 +20,20 @@ def main():
         node_dir = os.path.join(regnet_dir, node)
         assert os.path.isdir(node_dir)
 
-        bitcoin_config = config.bitcoin(datadir=node_dir)
-        proxy = bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' %
-                                  (bitcoin_config.get('rpcuser'),
-                                   bitcoin_config.get('rpcpassword'),
-                                   bitcoin_config.getint('rpcport')))
+        proxy = config.bitcoin_proxy(datadir=node_dir)
         try:
             proxy.stop()
         except ConnectionRefusedError:
             print("Connection refused, assume stopped")
 
-        lightning_config = config.lightning(datadir=node_dir)
-        lproxy = jsonrpcproxy.AuthProxy(
-            'http://localhost:%d/local/' % lightning_config.getint('port'),
-            (lightning_config.get('rpcuser'),
-             lightning_config.get('rpcpassword')))
+        lproxy = config.lightning_proxy(datadir=node_dir)
         try:
             lproxy.stop()
         except requests.exceptions.ConnectionError:
             print("Lightning connection refused, assume stopped")
 
     time.sleep(1)
+    #os.remove(regnet_dir+'/Carol/regtest/wallet.dat')
     shutil.rmtree(regnet_dir)
 
 if __name__ == "__main__":

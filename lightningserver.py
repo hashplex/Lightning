@@ -103,12 +103,8 @@ def run(conf):
     """Start the server."""
     # TODO: store on application object
     global bitcoind
-    bitcoin_config = config.bitcoin(datadir=conf['datadir'])
-    bitcoind = bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' %
-                                 (bitcoin_config.get('rpcuser'),
-                                  bitcoin_config.get('rpcpassword'),
-                                  bitcoin_config.getint('rpcport')))
-
+    bitcoind = config.bitcoin_proxy(datadir=conf['datadir'])
+    
     global username, password
     username, password = conf.get('rpcuser'), conf.get('rpcpassword')
     port = conf.getint('port')
