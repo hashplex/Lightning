@@ -10,8 +10,7 @@ from functools import wraps
 from flask import Response
 import os
 import os.path
-from private_api import API as PRIVATEAPI
-from public_api import API as PUBLICAPI
+from channel import REMOTE_API as PUBLIC_API, LOCAL_API as PRIVATE_API
 from flask import g
 
 # Copied from http://flask.pocoo.org/snippets/8/
@@ -45,14 +44,16 @@ def requires_auth(view):
     return decorated
 
 app = Flask(__name__) # pylint: disable=invalid-name
-app.add_url_rule('/', 'PUBLICAPI', PUBLICAPI.as_view(), methods=['POST'])
-app.add_url_rule('/local/', 'PRIVATEAPI', requires_auth(PRIVATEAPI.as_view()),
+app.add_url_rule('/', 'PUBLIC_API', PUBLIC_API.as_view(), methods=['POST'])
+app.add_url_rule('/local/', 'PRIVATE_API',
+                 requires_auth(PRIVATE_API.as_view()),
                  methods=['POST'])
 
 @app.before_request
 def before_request():
     """Set up g context."""
     g.config = app.config
+    g.bit = app.config['bitcoind']
 
 def shutdown_server():
     """Stop the server."""
