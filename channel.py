@@ -12,12 +12,19 @@ from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG
 from bitcoin.core.script import OP_RETURN
+from base64 import b64encode, b64decode
 
 LOCAL_API = JSONRPCAPI()
 REMOTE_API = JSONRPCAPI()
 
 LOCAL = LOCAL_API.dispatcher.add_method
 REMOTE = REMOTE_API.dispatcher.add_method
+
+def serialize_bytes(bytedata):
+    return b64encode(bytedata).decode()
+
+def deserialize_bytes(b64data):
+    return b64decode(b64data.encode())
 
 def select_coins(amount):
     """Get a txin set and change to spend amount."""
@@ -43,10 +50,12 @@ def anchor_script():
 def create(url, mymoney, theirmoney, fees):
     """Open a payment channel."""
     bob = jsonrpcproxy.Proxy(url)
-    bob.open_channel(theirmoney, mymoney, fees)
-    payment = CMutableTxOut(mymoney, anchor_script())
     coins, change = select_coins(mymoney + fees)
-    transaction = CMutableTransaction(coins, [payment, change])
+    serialized_coins = [serialize_bytes(coin.serialize()) for coin in coins]
+    serialized_change = serialize_bytes(change.serialize())
+    transaction = CMutableTransaction.deserialize(deserialize_bytes(
+        bob.open_channel(theirmoney, mymoney, fees,
+                         serialized_coins, serialized_change)))
     transaction = g.bit.signrawtransaction(transaction)
     assert transaction['complete']
     transaction = transaction['tx']
@@ -74,14 +83,18 @@ def get_address():
     return str(g.bit.getnewaddress())
 
 @REMOTE
-def open_channel(mymoney, theirmoney, fees):
+def open_channel(mymoney, theirmoney, fees, their_coins, their_change):
     """Open a payment channel."""
-    payment = CMutableTxOut(mymoney, anchor_script())
+    their_coins = [CMutableTxIn.deserialize(deserialize_bytes(coin))
+                   for coin in their_coins]
+    their_change = CMutableTxOut.deserialize(deserialize_bytes(their_change))
     coins, change = select_coins(mymoney + fees)
-    transaction = CMutableTransaction(coins, [payment, change])
+    payment = CMutableTxOut(mymoney + theirmoney, anchor_script())
+    transaction = CMutableTransaction(
+        their_coins + coins,
+        [payment, change, their_change])
     transaction = g.bit.signrawtransaction(transaction)
     print(transaction)
-    assert transaction['complete']
+    #assert transaction['complete']
     transaction = transaction['tx']
-    g.bit.sendrawtransaction(transaction)
-    return True
+    return serialize_bytes(transaction.serialize())
