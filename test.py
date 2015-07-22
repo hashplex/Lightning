@@ -7,9 +7,12 @@ import time
 
 class TestBitcoind(unittest.TestCase):
     """Run basic tests on bitcoind."""
-    def propagate(self, node):
-        """Ensure all nodes are up to date with transactions by node."""
-        node.bit.generate(1)
+    def propagate(self):
+        """Ensure all nodes up to date."""
+        while len(set(tuple(sorted(node.bit.getrawmempool()))
+                      for node in [self.alice, self.bob, self.carol])) > 1:
+            time.sleep(0.5)
+        self.carol.bit.generate(1)
         while self.alice.bit.getblockcount() != self.carol.bit.getblockcount():
             time.sleep(0.5)
 
@@ -17,12 +20,13 @@ class TestBitcoind(unittest.TestCase):
         proxies = create_regnet.main()
         self.alice, self.bob, self.carol = proxies
         self.carol.bit.generate(101)
+        self.propagate()
         self.carol.bit.sendmany(
             "",
             {self.alice.bit.getnewaddress(): 100000000,
              self.bob.bit.getnewaddress(): 100000000,
             })
-        self.propagate(self.carol)
+        self.propagate()
 
     def tearDown(self):
         destroy_regnet.main()
@@ -36,8 +40,7 @@ class TestBitcoind(unittest.TestCase):
     def test_channel(self):
         """Test a payment channel."""
         self.alice.lit.create(self.bob.lurl, 50000000, 25000000, 5000)
-        self.propagate(self.alice)
-        self.propagate(self.bob)
+        self.propagate()
         self.assertEqual(self.alice.bit.getbalance(), 49995000)
         self.assertEqual(self.bob.bit.getbalance(), 74995000)
         self.assertEqual(self.alice.lit.getbalance(), 99995000)
@@ -49,8 +52,7 @@ class TestBitcoind(unittest.TestCase):
         self.assertEqual(self.alice.lit.getbalance(), 94995000)
         self.assertEqual(self.bob.lit.getbalance(), 104995000)
         self.bob.lit.close()
-        self.propagate(self.bob)
-        self.propagate(self.alice)
+        self.propagate()
         self.assertEqual(self.alice.bit.getbalance(), 94990000)
         self.assertEqual(self.bob.bit.getbalance(), 104990000)
 
