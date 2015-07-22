@@ -8,10 +8,11 @@ import bitcoin.wallet
 from bitcoin.core import b2x, lx, COIN
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction, Hash160
+from bitcoin.wallet import CBitcoinAddress
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG
-from bitcoin.core.script import OP_RETURN
+from bitcoin.core.script import OP_RETURN, OP_CHECKMULTISIGVERIFY
 from base64 import b64encode, b64decode
 
 LOCAL_API = JSONRPCAPI()
@@ -42,9 +43,14 @@ def select_coins(amount):
     change = CMutableTxOut(-amount, g.bit.getnewaddress().to_scriptPubKey())
     return out, change
 
-def anchor_script():
+def anchor_script(my_pubkey, their_pubkey):
     """Generate the output script for the anchor transaction."""
-    return CScript([OP_RETURN]).to_p2sh_scriptPubKey()
+    script = CScript([2, my_pubkey, their_pubkey, 2, OP_CHECKMULTISIGVERIFY])
+    return script.to_p2sh_scriptPubKey()
+
+def get_pubkey():
+    """Get a new pubkey."""
+    return g.bit.validateaddress(g.bit.getnewaddress())['pubkey']
 
 @LOCAL
 def create(url, mymoney, theirmoney, fees):
@@ -53,9 +59,12 @@ def create(url, mymoney, theirmoney, fees):
     coins, change = select_coins(mymoney + fees)
     serialized_coins = [serialize_bytes(coin.serialize()) for coin in coins]
     serialized_change = serialize_bytes(change.serialize())
+    pubkey = get_pubkey()
+    serialized_pubkey = serialize_bytes(pubkey)
     transaction = CMutableTransaction.deserialize(deserialize_bytes(
         bob.open_channel(theirmoney, mymoney, fees,
-                         serialized_coins, serialized_change)))
+                         serialized_coins, serialized_change,
+                         serialized_pubkey)))
     transaction = g.bit.signrawtransaction(transaction)
     assert transaction['complete']
     transaction = transaction['tx']
@@ -83,13 +92,16 @@ def get_address():
     return str(g.bit.getnewaddress())
 
 @REMOTE
-def open_channel(mymoney, theirmoney, fees, their_coins, their_change):
+def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
+                 their_pubkey):
     """Open a payment channel."""
     their_coins = [CMutableTxIn.deserialize(deserialize_bytes(coin))
                    for coin in their_coins]
     their_change = CMutableTxOut.deserialize(deserialize_bytes(their_change))
+    their_pubkey = deserialize_bytes(their_pubkey)
     coins, change = select_coins(mymoney + fees)
-    payment = CMutableTxOut(mymoney + theirmoney, anchor_script())
+    anchor_output_script = anchor_script(get_pubkey(), their_pubkey)
+    payment = CMutableTxOut(mymoney + theirmoney, anchor_output_script)
     transaction = CMutableTransaction(
         their_coins + coins,
         [payment, change, their_change])
