@@ -5,15 +5,17 @@ from jsonrpc.backend.flask import JSONRPCAPI
 from flask import g
 import bitcoin
 import bitcoin.wallet
-from bitcoin.core import b2x, lx, COIN
+from bitcoin.core import b2x, b2lx, lx, COIN
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction, Hash160
-from bitcoin.wallet import CBitcoinAddress
+from bitcoin.wallet import CBitcoinAddress, CBitcoinSecret
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG
-from bitcoin.core.script import OP_RETURN, OP_CHECKMULTISIGVERIFY
+from bitcoin.core.script import OP_RETURN, OP_CHECKMULTISIG
 from base64 import b64encode, b64decode
+from bitcoin.rpc import hexlify
+import hashlib
 
 LOCAL_API = JSONRPCAPI()
 REMOTE_API = JSONRPCAPI()
@@ -40,17 +42,18 @@ def select_coins(amount):
             break
     if amount > 0:
         raise Exception("Not enough money")
-    change = CMutableTxOut(-amount, g.bit.getnewaddress().to_scriptPubKey())
+    change = CMutableTxOut(
+        -amount, g.bit.getrawchangeaddress().to_scriptPubKey())
     return out, change
 
 def anchor_script(my_pubkey, their_pubkey):
     """Generate the output script for the anchor transaction."""
-    script = CScript([2, my_pubkey, their_pubkey, 2, OP_CHECKMULTISIGVERIFY])
-    return script.to_p2sh_scriptPubKey()
+    script = CScript([2, my_pubkey, their_pubkey, 2, OP_CHECKMULTISIG])
+    return script
 
 def get_pubkey():
     """Get a new pubkey."""
-    return g.bit.validateaddress(g.bit.getnewaddress())['pubkey']
+    return g.seckey.pub
 
 @LOCAL
 def create(url, mymoney, theirmoney, fees):
@@ -61,20 +64,29 @@ def create(url, mymoney, theirmoney, fees):
     serialized_change = serialize_bytes(change.serialize())
     pubkey = get_pubkey()
     serialized_pubkey = serialize_bytes(pubkey)
+    transaction, redeem = bob.open_channel(
+        theirmoney, mymoney, fees,
+        serialized_coins, serialized_change,
+        serialized_pubkey)
     transaction = CMutableTransaction.deserialize(deserialize_bytes(
-        bob.open_channel(theirmoney, mymoney, fees,
-                         serialized_coins, serialized_change,
-                         serialized_pubkey)))
+        transaction))
+    anchor_output_script = CScript(deserialize_bytes(redeem))
+    anchor_output_address = anchor_output_script.to_p2sh_scriptPubKey()
     transaction = g.bit.signrawtransaction(transaction)
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
     with g.dat:
-        g.dat.execute("INSERT INTO CHANNELS(amount) VALUES (?)", (mymoney,))
+        g.dat.execute(
+            "INSERT INTO CHANNELS(amount, anchor, fees, redeem) VALUES (?, ?, ?, ?)", 
+            (mymoney, transaction.GetHash(), fees, anchor_output_script))
     return True
 
 def lightning_balance():
-    return g.dat.execute("SELECT * FROM CHANNELS").fetchone()[0]
+    return sum(
+        row[0] 
+        for row in g.dat.execute("SELECT amount FROM CHANNELS")
+        )
 
 @LOCAL
 def getbalance():
@@ -92,8 +104,28 @@ def send(url, amount):
     return True
 
 @LOCAL
-def close():
+def close(url):
     """Close a channel."""
+    bob = jsonrpcproxy.Proxy(url)
+    amount, anchor, fees, redeem = g.dat.execute("SELECT * from CHANNELS").fetchone()
+    redeem = CScript(redeem)
+    output = CMutableTxOut(
+        amount - fees, g.bit.getnewaddress().to_scriptPubKey())
+    serialized_output = serialize_bytes(output.serialize())
+    transaction, bob_sig = bob.close_channel(serialized_output)
+    transaction = CMutableTransaction.deserialize(deserialize_bytes(
+        transaction))
+    transaction = CMutableTransaction.from_tx(transaction)
+    anchor = transaction.vin[0]
+    bob_sig = deserialize_bytes(bob_sig)
+    sighash = SignatureHash(redeem, transaction, 0, SIGHASH_ALL)
+    sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
+    anchor.scriptSig = CScript([0, sig, bob_sig, redeem])
+    VerifyScript(anchor.scriptSig, redeem.to_p2sh_scriptPubKey(),
+                 transaction, 0, (SCRIPT_VERIFY_P2SH,))
+    g.bit.sendrawtransaction(transaction)
+    with g.dat:
+        g.dat.execute("DELETE FROM CHANNELS")
     return True
 
 @REMOTE
@@ -116,7 +148,8 @@ def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
     their_pubkey = deserialize_bytes(their_pubkey)
     coins, change = select_coins(mymoney + fees)
     anchor_output_script = anchor_script(get_pubkey(), their_pubkey)
-    payment = CMutableTxOut(mymoney + theirmoney, anchor_output_script)
+    anchor_output_address = anchor_output_script.to_p2sh_scriptPubKey()
+    payment = CMutableTxOut(mymoney + theirmoney, anchor_output_address)
     transaction = CMutableTransaction(
         their_coins + coins,
         [payment, change, their_change])
@@ -125,8 +158,11 @@ def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
     #assert transaction['complete']
     transaction = transaction['tx']
     with g.dat:
-        g.dat.execute("INSERT INTO CHANNELS(amount) VALUES (?)", (mymoney,))
-    return serialize_bytes(transaction.serialize())
+        g.dat.execute(
+            "INSERT INTO CHANNELS(amount, anchor, fees, redeem) VALUES (?, ?, ?, ?)", 
+            (mymoney, transaction.GetHash(), fees, anchor_output_script))
+    return (serialize_bytes(transaction.serialize()),
+            serialize_bytes(anchor_output_script))
 
 @REMOTE
 def recieve(amount):
@@ -135,3 +171,19 @@ def recieve(amount):
         g.dat.execute(
             "UPDATE CHANNELS SET amount = ?", (lightning_balance() + amount,))
     return True
+
+@REMOTE
+def close_channel(their_output):
+    their_output = CMutableTxOut.deserialize(deserialize_bytes(their_output))
+    amount, anchor, fees, redeem = g.dat.execute("SELECT * from CHANNELS").fetchone()
+    redeem = CScript(redeem)
+    output = CMutableTxOut(
+        amount - fees, g.bit.getnewaddress().to_scriptPubKey())
+    anchor = CMutableTxIn(COutPoint(anchor, 0))
+    transaction = CMutableTransaction([anchor,], [output, their_output])
+    sighash = SignatureHash(redeem, transaction, 0, SIGHASH_ALL)
+    sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
+    with g.dat:
+        g.dat.execute("DELETE FROM CHANNELS")
+    return (serialize_bytes(transaction.serialize()),
+            serialize_bytes(sig))

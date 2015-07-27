@@ -36,7 +36,6 @@ class TestBitcoind(unittest.TestCase):
         self.assertEqual(self.alice.bit.getbalance(), 100000000)
         self.assertEqual(self.bob.bit.getbalance(), 100000000)
 
-    #@unittest.expectedFailure
     def test_channel(self):
         """Test a payment channel."""
         self.alice.lit.create(self.bob.lurl, 50000000, 25000000, 5000)
@@ -51,10 +50,12 @@ class TestBitcoind(unittest.TestCase):
         self.alice.lit.send(self.bob.lurl, 10000000)
         self.assertEqual(self.alice.lit.getbalance(), 94995000)
         self.assertEqual(self.bob.lit.getbalance(), 104995000)
-        self.bob.lit.close()
+        self.bob.lit.close(self.alice.lurl)
         self.propagate()
         self.assertEqual(self.alice.bit.getbalance(), 94990000)
         self.assertEqual(self.bob.bit.getbalance(), 104990000)
+        self.assertEqual(self.alice.lit.getbalance(), 94990000)
+        self.assertEqual(self.bob.lit.getbalance(), 104990000)
 
 if __name__ == '__main__':
     unittest.main()

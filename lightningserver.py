@@ -13,6 +13,8 @@ import os.path
 from channel import REMOTE_API as PUBLIC_API, LOCAL_API as PRIVATE_API
 from flask import g
 import sqlite3
+import hashlib
+from bitcoin.wallet import CBitcoinSecret
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -56,6 +58,8 @@ def before_request():
     g.config = app.config
     g.bit = app.config['bitcoind']
     g.dat = sqlite3.connect(app.config['database_path'])
+    h = hashlib.sha256(b'correct horse battery staple').digest()
+    g.seckey = CBitcoinSecret.from_secret_bytes(h)
 
 @app.teardown_request
 def teardown_request(exception):
@@ -102,7 +106,7 @@ def otherinfo():
 def init_db(database_path):
     """Set up the database."""
     dat = sqlite3.connect(database_path)
-    dat.execute("CREATE TABLE CHANNELS(amount)")
+    dat.execute("CREATE TABLE CHANNELS(amount, anchor, fees, redeem)")
 
 def run(conf):
     """Start the server."""
