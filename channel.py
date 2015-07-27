@@ -69,12 +69,16 @@ def create(url, mymoney, theirmoney, fees):
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
+    with g.dat:
+        g.dat.execute("INSERT INTO CHANNELS(amount) VALUES (?)", (mymoney,))
     return True
 
 @LOCAL
 def getbalance():
     """Get the balance including funds locked in payment channels."""
-    return 0
+    lightning_balance = g.dat.execute("SELECT * FROM CHANNELS").fetchone()[0]
+    bitcoin_balance = g.bit.getbalance()
+    return lightning_balance + bitcoin_balance
 
 @LOCAL
 def send(url, amount):

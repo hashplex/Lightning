@@ -12,6 +12,7 @@ import os
 import os.path
 from channel import REMOTE_API as PUBLIC_API, LOCAL_API as PRIVATE_API
 from flask import g
+import sqlite3
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -54,6 +55,13 @@ def before_request():
     """Set up g context."""
     g.config = app.config
     g.bit = app.config['bitcoind']
+    g.dat = sqlite3.connect(app.config['database_path'])
+
+@app.teardown_request
+def teardown_request(exception):
+    dat = getattr(g, 'dat', None)
+    if dat is not None:
+        g.dat.close()
 
 def shutdown_server():
     """Stop the server."""
@@ -91,6 +99,11 @@ def otherinfo():
     proxy = jsonrpcproxy.Proxy('http://localhost:%d' % port)
     return str(proxy.info())
 
+def init_db(database_path):
+    """Set up the database."""
+    dat = sqlite3.connect(database_path)
+    dat.execute("CREATE TABLE CHANNELS(amount)")
+
 def run(conf):
     """Start the server."""
 
@@ -104,6 +117,10 @@ def run(conf):
 
     app.config.update(conf)
     app.config['bitcoind'] = config.bitcoin_proxy(datadir=conf['datadir'])
+    app.config['database_path'] = os.path.join(
+        conf['datadir'], 'lightning.dat')
+    if not os.path.isfile(app.config['database_path']):
+        init_db(app.config['database_path'])
 
     port = conf.getint('port')
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False)
