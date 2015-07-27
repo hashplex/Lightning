@@ -113,4 +113,6 @@ def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
     print(transaction)
     #assert transaction['complete']
     transaction = transaction['tx']
+    with g.dat:
+        g.dat.execute("INSERT INTO CHANNELS(amount) VALUES (?)", (mymoney,))
     return serialize_bytes(transaction.serialize())
