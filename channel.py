@@ -73,16 +73,27 @@ def create(url, mymoney, theirmoney, fees):
         g.dat.execute("INSERT INTO CHANNELS(amount) VALUES (?)", (mymoney,))
     return True
 
+def lightning_balance():
+    return g.dat.execute("SELECT * FROM CHANNELS").fetchone()[0]
+
 @LOCAL
 def getbalance():
     """Get the balance including funds locked in payment channels."""
-    lightning_balance = g.dat.execute("SELECT * FROM CHANNELS").fetchone()[0]
-    bitcoin_balance = g.bit.getbalance()
-    return lightning_balance + bitcoin_balance
+    return lightning_balance() + g.bit.getbalance()
 
 @LOCAL
 def send(url, amount):
     """Send coin in the channel."""
+    with g.dat:
+        g.dat.execute(
+            "UPDATE CHANNELS SET amount = ?", (lightning_balance() - amount,))
+    bob = jsonrpcproxy.Proxy(url)
+    bob.recieve(amount)
+    return True
+
+@LOCAL
+def close():
+    """Close a channel."""
     return True
 
 @REMOTE
@@ -116,3 +127,11 @@ def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
     with g.dat:
         g.dat.execute("INSERT INTO CHANNELS(amount) VALUES (?)", (mymoney,))
     return serialize_bytes(transaction.serialize())
+
+@REMOTE
+def recieve(amount):
+    """Recieve money."""
+    with g.dat:
+        g.dat.execute(
+            "UPDATE CHANNELS SET amount = ?", (lightning_balance() + amount,))
+    return True
