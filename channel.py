@@ -3,19 +3,12 @@
 import jsonrpcproxy
 from jsonrpc.backend.flask import JSONRPCAPI
 from flask import g
-import bitcoin
-import bitcoin.wallet
-from bitcoin.core import b2x, b2lx, lx, COIN
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
-from bitcoin.core import CMutableTransaction, Hash160
-from bitcoin.wallet import CBitcoinAddress, CBitcoinSecret
+from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
-from bitcoin.core.script import OP_DUP, OP_HASH160, OP_EQUALVERIFY, OP_CHECKSIG
-from bitcoin.core.script import OP_RETURN, OP_CHECKMULTISIG
+from bitcoin.core.script import OP_CHECKMULTISIG
 from base64 import b64encode, b64decode
-from bitcoin.rpc import hexlify
-import hashlib
 
 LOCAL_API = JSONRPCAPI()
 REMOTE_API = JSONRPCAPI()
@@ -24,9 +17,11 @@ LOCAL = LOCAL_API.dispatcher.add_method
 REMOTE = REMOTE_API.dispatcher.add_method
 
 def serialize_bytes(bytedata):
+    """Convert bytes to str."""
     return b64encode(bytedata).decode()
 
 def deserialize_bytes(b64data):
+    """Convert str to bytes."""
     return b64decode(b64data.encode())
 
 def select_coins(amount):
@@ -71,20 +66,20 @@ def create(url, mymoney, theirmoney, fees):
     transaction = CMutableTransaction.deserialize(deserialize_bytes(
         transaction))
     anchor_output_script = CScript(deserialize_bytes(redeem))
-    anchor_output_address = anchor_output_script.to_p2sh_scriptPubKey()
     transaction = g.bit.signrawtransaction(transaction)
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
     with g.dat:
         g.dat.execute(
-            "INSERT INTO CHANNELS(amount, anchor, fees, redeem) VALUES (?, ?, ?, ?)", 
+            "INSERT INTO CHANNELS(amount, anchor, fees, redeem) VALUES (?, ?, ?, ?)",
             (mymoney, transaction.GetHash(), fees, anchor_output_script))
     return True
 
 def lightning_balance():
+    """Get the balance in lightning channels exclusively."""
     return sum(
-        row[0] 
+        row[0]
         for row in g.dat.execute("SELECT amount FROM CHANNELS")
         )
 
@@ -159,7 +154,7 @@ def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
     transaction = transaction['tx']
     with g.dat:
         g.dat.execute(
-            "INSERT INTO CHANNELS(amount, anchor, fees, redeem) VALUES (?, ?, ?, ?)", 
+            "INSERT INTO CHANNELS(amount, anchor, fees, redeem) VALUES (?, ?, ?, ?)",
             (mymoney, transaction.GetHash(), fees, anchor_output_script))
     return (serialize_bytes(transaction.serialize()),
             serialize_bytes(anchor_output_script))
@@ -174,6 +169,7 @@ def recieve(amount):
 
 @REMOTE
 def close_channel(their_output):
+    """Close a channel."""
     their_output = CMutableTxOut.deserialize(deserialize_bytes(their_output))
     amount, anchor, fees, redeem = g.dat.execute("SELECT * from CHANNELS").fetchone()
     redeem = CScript(redeem)

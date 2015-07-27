@@ -58,11 +58,12 @@ def before_request():
     g.config = app.config
     g.bit = app.config['bitcoind']
     g.dat = sqlite3.connect(app.config['database_path'])
-    h = hashlib.sha256(b'correct horse battery staple').digest()
-    g.seckey = CBitcoinSecret.from_secret_bytes(h)
+    secret = hashlib.sha256(b'correct horse battery staple').digest()
+    g.seckey = CBitcoinSecret.from_secret_bytes(secret)
 
 @app.teardown_request
-def teardown_request(exception):
+def teardown_request(dummyexception):
+    """Clean up."""
     dat = getattr(g, 'dat', None)
     if dat is not None:
         g.dat.close()
