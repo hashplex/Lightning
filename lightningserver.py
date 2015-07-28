@@ -60,6 +60,7 @@ def before_request():
     g.dat = sqlite3.connect(app.config['database_path'])
     secret = hashlib.sha256(b'correct horse battery staple').digest()
     g.seckey = CBitcoinSecret.from_secret_bytes(secret)
+    g.addr = 'http://localhost:%d/' % int(app.config['port'])
 
 @app.teardown_request
 def teardown_request(dummyexception):
@@ -97,6 +98,11 @@ def infoweb():
     """Get bitcoind info."""
     return str(app.config['bitcoind'].getinfo())
 
+@app.route('/dump')
+def dump():
+    """Dump the DB."""
+    return '\n'.join(line for line in g.dat.iterdump())
+
 @app.route('/otherinfo')
 def otherinfo():
     """Get remote node info."""
@@ -107,7 +113,7 @@ def otherinfo():
 def init_db(database_path):
     """Set up the database."""
     dat = sqlite3.connect(database_path)
-    dat.execute("CREATE TABLE CHANNELS(amount, anchor, fees, redeem)")
+    dat.execute("CREATE TABLE CHANNELS(address, amount, anchor, fees, redeem)")
 
 def run(conf):
     """Start the server."""

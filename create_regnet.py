@@ -89,7 +89,7 @@ def main():
             raise
         with open(os.path.join(node_dir, 'log.txt'), 'a') as log_file:
             #log_file = None
-            subprocess.check_call([bitcoind, "-datadir=%s" % node_dir],
+            subprocess.check_call([bitcoind, "-datadir=%s" % node_dir, "-debug"],
                                   stdin=subprocess.DEVNULL,
                                   stdout=log_file,
                                   stderr=subprocess.STDOUT)

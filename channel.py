@@ -27,32 +27,6 @@ def deserialize_bytes(b64data):
     """Convert str to bytes."""
     return b64decode(b64data.encode())
 
-RAW_TYPES = [int, str,]
-def to_json(message, field_type=None):
-    """Convert a message to JSON"""
-    if isinstance(message, list):
-        return [to_json(sub, field_type) for sub in message]
-    if field_type == None:
-        field_type = type(message)
-    if field_type in RAW_TYPES:
-        return message
-    if issubclass(field_type, bytes):
-        return serialize_bytes(message)
-    if issubclass(field_type, Serializable):
-        return to_json(message.serialize(), bytes)
-    raise Exception("Unable to convert", field_type, message)
-def from_json(message, field_type):
-    """Convert a message from JSON"""
-    if isinstance(message, list):
-        return [from_json(sub, field_type) for sub in message]
-    if field_type in RAW_TYPES:
-        return message
-    if issubclass(field_type, bytes):
-        return field_type(deserialize_bytes(message))
-    if issubclass(field_type, Serializable):
-        return field_type.deserialize(from_json(message, bytes))
-    raise Exception("Unable to convert", field_type, message)
-
 class Message(object):
     """Base class for JSON serializable messages."""
     fields = []
@@ -74,6 +48,36 @@ class Message(object):
         for field, field_type in cls.fields:
             setattr(self, field, from_json(field_type, json_data[field]))
         return self
+
+RAW_JSON_TYPES = [int, str,]
+def to_json(message, field_type=None):
+    """Convert a message to JSON"""
+    if isinstance(message, list):
+        return [to_json(sub, field_type) for sub in message]
+    if field_type == None:
+        field_type = type(message)
+    if field_type in RAW_JSON_TYPES:
+        return message
+    if issubclass(field_type, bytes):
+        return serialize_bytes(message)
+    if issubclass(field_type, Serializable):
+        return to_json(message.serialize(), bytes)
+    if issubclass(field_type, Message):
+        return message.json()
+    raise Exception("Unable to convert", field_type, message)
+def from_json(message, field_type):
+    """Convert a message from JSON"""
+    if isinstance(message, list):
+        return [from_json(sub, field_type) for sub in message]
+    if field_type in RAW_JSON_TYPES:
+        return message
+    if issubclass(field_type, bytes):
+        return field_type(deserialize_bytes(message))
+    if issubclass(field_type, Serializable):
+        return field_type.deserialize(from_json(message, bytes))
+    if issubclass(field_type, Message):
+        return field_type.from_json(message)
+    raise Exception("Unable to convert", field_type, message)
 
 class CreationMessage(Message):
     """Sent when a channel is opened."""
@@ -116,10 +120,10 @@ def get_pubkey():
 def create(url, mymoney, theirmoney, fees):
     """Open a payment channel."""
     bob = jsonrpcproxy.Proxy(url)
-    coins, change = select_coins(mymoney + fees)
+    coins, change = select_coins(mymoney + 2 * fees)
     pubkey = get_pubkey()
     transaction, redeem = bob.open_channel(
-        theirmoney, mymoney, fees,
+        g.addr, theirmoney, mymoney, fees,
         to_json(coins), to_json(change),
         to_json(pubkey))
     transaction = CMutableTransaction.deserialize(deserialize_bytes(
@@ -131,16 +135,26 @@ def create(url, mymoney, theirmoney, fees):
     g.bit.sendrawtransaction(transaction)
     with g.dat:
         g.dat.execute(
-            "INSERT INTO CHANNELS(amount, anchor, fees, redeem) VALUES (?, ?, ?, ?)",
-            (mymoney, transaction.GetHash(), fees, anchor_output_script))
+            "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
+            (url, mymoney, transaction.GetHash(), fees, anchor_output_script))
     return True
 
 def lightning_balance():
     """Get the balance in lightning channels exclusively."""
     return sum(
         row[0]
-        for row in g.dat.execute("SELECT amount FROM CHANNELS")
+        for row in g.dat.execute("SELECT amount, fees FROM CHANNELS")
         )
+
+def update_db(address, amount):
+    """Update the db for a payment."""
+    row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (address,)).fetchone()
+    if row is None:
+        raise Exception("Unknown address", address)
+    address, current_amount, anchor, fees, redeem = row
+    with g.dat:
+        g.dat.execute(
+            "UPDATE CHANNELS SET amount = ? WHERE address = ?", (current_amount + amount, address))
 
 @LOCAL
 def getbalance():
@@ -150,23 +164,24 @@ def getbalance():
 @LOCAL
 def send(url, amount):
     """Send coin in the channel."""
-    with g.dat:
-        g.dat.execute(
-            "UPDATE CHANNELS SET amount = ?", (lightning_balance() - amount,))
+    update_db(url, -amount)
     bob = jsonrpcproxy.Proxy(url)
-    bob.recieve(amount)
+    bob.recieve(g.addr, amount)
     return True
 
 @LOCAL
 def close(url):
     """Close a channel."""
     bob = jsonrpcproxy.Proxy(url)
-    amount, anchor, fees, redeem = g.dat.execute("SELECT * from CHANNELS").fetchone()
+    row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (url,)).fetchone()
+    if row is None:
+        raise Exception("Unknown address", address)
+    address, current_amount, anchor, fees, redeem = row
     redeem = CScript(redeem)
     output = CMutableTxOut(
-        amount - fees, g.bit.getnewaddress().to_scriptPubKey())
+        current_amount, g.bit.getnewaddress().to_scriptPubKey())
     serialized_output = serialize_bytes(output.serialize())
-    transaction, bob_sig = bob.close_channel(serialized_output)
+    transaction, bob_sig = bob.close_channel(g.addr, serialized_output)
     transaction = CMutableTransaction.deserialize(deserialize_bytes(
         transaction))
     transaction = CMutableTransaction.from_tx(transaction)
@@ -179,7 +194,7 @@ def close(url):
                  transaction, 0, (SCRIPT_VERIFY_P2SH,))
     g.bit.sendrawtransaction(transaction)
     with g.dat:
-        g.dat.execute("DELETE FROM CHANNELS")
+        g.dat.execute("DELETE FROM CHANNELS WHERE address = ?", (url,))
     return True
 
 @REMOTE
@@ -193,16 +208,16 @@ def get_address():
     return str(g.bit.getnewaddress())
 
 @REMOTE
-def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
+def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change,
                  their_pubkey):
     """Open a payment channel."""
     their_coins = from_json(their_coins, CMutableTxIn)
     their_change = from_json(their_change, CMutableTxOut)
     their_pubkey = from_json(their_pubkey, bytes)
-    coins, change = select_coins(mymoney + fees)
+    coins, change = select_coins(mymoney + 2 * fees)
     anchor_output_script = anchor_script(get_pubkey(), their_pubkey)
     anchor_output_address = anchor_output_script.to_p2sh_scriptPubKey()
-    payment = CMutableTxOut(mymoney + theirmoney, anchor_output_address)
+    payment = CMutableTxOut(mymoney + theirmoney + 2 * fees, anchor_output_address)
     transaction = CMutableTransaction(
         their_coins + coins,
         [payment, change, their_change])
@@ -212,32 +227,33 @@ def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
     transaction = transaction['tx']
     with g.dat:
         g.dat.execute(
-            "INSERT INTO CHANNELS(amount, anchor, fees, redeem) VALUES (?, ?, ?, ?)",
-            (mymoney, transaction.GetHash(), fees, anchor_output_script))
+            "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
+            (address, mymoney, transaction.GetHash(), fees, anchor_output_script))
     return (serialize_bytes(transaction.serialize()),
             serialize_bytes(anchor_output_script))
 
 @REMOTE
-def recieve(amount):
+def recieve(address, amount):
     """Recieve money."""
-    with g.dat:
-        g.dat.execute(
-            "UPDATE CHANNELS SET amount = ?", (lightning_balance() + amount,))
+    update_db(address, amount)
     return True
 
 @REMOTE
-def close_channel(their_output):
+def close_channel(address, their_output):
     """Close a channel."""
     their_output = CMutableTxOut.deserialize(deserialize_bytes(their_output))
-    amount, anchor, fees, redeem = g.dat.execute("SELECT * from CHANNELS").fetchone()
+    row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (address,)).fetchone()
+    if row is None:
+        raise Exception("Unknown address", address)
+    address, current_amount, anchor, fees, redeem = row
     redeem = CScript(redeem)
     output = CMutableTxOut(
-        amount - fees, g.bit.getnewaddress().to_scriptPubKey())
+        current_amount, g.bit.getnewaddress().to_scriptPubKey())
     anchor = CMutableTxIn(COutPoint(anchor, 0))
     transaction = CMutableTransaction([anchor,], [output, their_output])
     sighash = SignatureHash(redeem, transaction, 0, SIGHASH_ALL)
     sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
     with g.dat:
-        g.dat.execute("DELETE FROM CHANNELS")
+        g.dat.execute("DELETE FROM CHANNELS WHERE address = ?", (address,))
     return (serialize_bytes(transaction.serialize()),
             serialize_bytes(sig))
