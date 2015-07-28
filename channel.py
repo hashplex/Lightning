@@ -9,12 +9,15 @@ from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_CHECKMULTISIG
 from base64 import b64encode, b64decode
+from bitcoin.core.serialize import Serializable
 
 LOCAL_API = JSONRPCAPI()
 REMOTE_API = JSONRPCAPI()
 
 LOCAL = LOCAL_API.dispatcher.add_method
 REMOTE = REMOTE_API.dispatcher.add_method
+
+IDENTITY = lambda arg: arg
 
 def serialize_bytes(bytedata):
     """Convert bytes to str."""
@@ -23,6 +26,65 @@ def serialize_bytes(bytedata):
 def deserialize_bytes(b64data):
     """Convert str to bytes."""
     return b64decode(b64data.encode())
+
+RAW_TYPES = [int, str,]
+def to_json(message, field_type=None):
+    """Convert a message to JSON"""
+    if isinstance(message, list):
+        return [to_json(sub, field_type) for sub in message]
+    if field_type == None:
+        field_type = type(message)
+    if field_type in RAW_TYPES:
+        return message
+    if issubclass(field_type, bytes):
+        return serialize_bytes(message)
+    if issubclass(field_type, Serializable):
+        return to_json(message.serialize(), bytes)
+    raise Exception("Unable to convert", field_type, message)
+def from_json(message, field_type):
+    """Convert a message from JSON"""
+    if isinstance(message, list):
+        return [from_json(sub, field_type) for sub in message]
+    if field_type in RAW_TYPES:
+        return message
+    if issubclass(field_type, bytes):
+        return field_type(deserialize_bytes(message))
+    if issubclass(field_type, Serializable):
+        return field_type.deserialize(from_json(message, bytes))
+    raise Exception("Unable to convert", field_type, message)
+
+class Message(object):
+    """Base class for JSON serializable messages."""
+    fields = []
+    def __init__(self, **kwargs):
+        for arg in kwargs:
+            setattr(self, arg, kwargs[arg])
+
+    def json(self):
+        """Convert message to JSON."""
+        return {
+            field: to_json(field_type, getattr(self, field))
+            for field, field_type in self.fields
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        """Convert message from JSON."""
+        self = cls()
+        for field, field_type in cls.fields:
+            setattr(self, field, from_json(field_type, json_data[field]))
+        return self
+
+class CreationMessage(Message):
+    """Sent when a channel is opened."""
+    fields = [
+        ('my_money', int),
+        ('your_money', int),
+        ('fees', int),
+        ('my_coins', CMutableTxIn),
+        ('my_change', CMutableTxOut),
+        ('my_pubkey', bytes),
+    ]
 
 def select_coins(amount):
     """Get a txin set and change to spend amount."""
@@ -55,14 +117,11 @@ def create(url, mymoney, theirmoney, fees):
     """Open a payment channel."""
     bob = jsonrpcproxy.Proxy(url)
     coins, change = select_coins(mymoney + fees)
-    serialized_coins = [serialize_bytes(coin.serialize()) for coin in coins]
-    serialized_change = serialize_bytes(change.serialize())
     pubkey = get_pubkey()
-    serialized_pubkey = serialize_bytes(pubkey)
     transaction, redeem = bob.open_channel(
         theirmoney, mymoney, fees,
-        serialized_coins, serialized_change,
-        serialized_pubkey)
+        to_json(coins), to_json(change),
+        to_json(pubkey))
     transaction = CMutableTransaction.deserialize(deserialize_bytes(
         transaction))
     anchor_output_script = CScript(deserialize_bytes(redeem))
@@ -137,10 +196,9 @@ def get_address():
 def open_channel(mymoney, theirmoney, fees, their_coins, their_change,
                  their_pubkey):
     """Open a payment channel."""
-    their_coins = [CMutableTxIn.deserialize(deserialize_bytes(coin))
-                   for coin in their_coins]
-    their_change = CMutableTxOut.deserialize(deserialize_bytes(their_change))
-    their_pubkey = deserialize_bytes(their_pubkey)
+    their_coins = from_json(their_coins, CMutableTxIn)
+    their_change = from_json(their_change, CMutableTxOut)
+    their_pubkey = from_json(their_pubkey, bytes)
     coins, change = select_coins(mymoney + fees)
     anchor_output_script = anchor_script(get_pubkey(), their_pubkey)
     anchor_output_address = anchor_output_script.to_p2sh_scriptPubKey()

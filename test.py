@@ -29,7 +29,7 @@ class TestChannel(unittest.TestCase):
         self.propagate()
 
     def tearDown(self):
-        destroy_regnet.main()
+        pass #destroy_regnet.main()
 
     def test_setup(self):
         """Test that the setup worked."""
