@@ -15,6 +15,7 @@ from flask import g
 import sqlite3
 import hashlib
 from bitcoin.wallet import CBitcoinSecret
+import random
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -58,7 +59,7 @@ def before_request():
     g.config = app.config
     g.bit = app.config['bitcoind']
     g.dat = sqlite3.connect(app.config['database_path'])
-    secret = hashlib.sha256(b'correct horse battery staple').digest()
+    secret = hashlib.sha256(app.config['secret']).digest()
     g.seckey = CBitcoinSecret.from_secret_bytes(secret)
     g.addr = 'http://localhost:%d/' % int(app.config['port'])
 
@@ -126,6 +127,9 @@ def run(conf):
     else:
         raise Exception("Non-regnet use not supported")
 
+    port = conf.getint('port')
+    app.config['secret'] = b'correct horse battery staple' + bytes(str(port), 'utf8')
+
     app.config.update(conf)
     app.config['bitcoind'] = config.bitcoin_proxy(datadir=conf['datadir'])
     app.config['database_path'] = os.path.join(
@@ -133,5 +137,4 @@ def run(conf):
     if not os.path.isfile(app.config['database_path']):
         init_db(app.config['database_path'])
 
-    port = conf.getint('port')
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False)
