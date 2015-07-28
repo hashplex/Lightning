@@ -6,6 +6,7 @@ from flask import g
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
+from bitcoin.core.scripteval import VerifyScriptError
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_CHECKMULTISIG
 from base64 import b64encode, b64decode
@@ -137,6 +138,7 @@ def create(url, mymoney, theirmoney, fees):
         g.dat.execute(
             "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
             (url, mymoney, transaction.GetHash(), fees, anchor_output_script))
+    bob.update_anchor(g.addr, to_json(transaction.GetHash()))
     return True
 
 def lightning_balance():
@@ -189,9 +191,14 @@ def close(url):
     bob_sig = deserialize_bytes(bob_sig)
     sighash = SignatureHash(redeem, transaction, 0, SIGHASH_ALL)
     sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
-    anchor.scriptSig = CScript([0, sig, bob_sig, redeem])
-    VerifyScript(anchor.scriptSig, redeem.to_p2sh_scriptPubKey(),
-                 transaction, 0, (SCRIPT_VERIFY_P2SH,))
+    anchor.scriptSig = CScript([0, bob_sig, sig, redeem])
+    try:
+        VerifyScript(anchor.scriptSig, redeem.to_p2sh_scriptPubKey(),
+                     transaction, 0, (SCRIPT_VERIFY_P2SH,))
+    except VerifyScriptError:
+        anchor.scriptSig = CScript([0, sig, bob_sig, redeem])
+        VerifyScript(anchor.scriptSig, redeem.to_p2sh_scriptPubKey(),
+                     transaction, 0, (SCRIPT_VERIFY_P2SH,))
     g.bit.sendrawtransaction(transaction)
     with g.dat:
         g.dat.execute("DELETE FROM CHANNELS WHERE address = ?", (url,))
@@ -222,8 +229,6 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change,
         their_coins + coins,
         [payment, change, their_change])
     transaction = g.bit.signrawtransaction(transaction)
-    print(transaction)
-    #assert transaction['complete']
     transaction = transaction['tx']
     with g.dat:
         g.dat.execute(
@@ -231,6 +236,13 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change,
             (address, mymoney, transaction.GetHash(), fees, anchor_output_script))
     return (serialize_bytes(transaction.serialize()),
             serialize_bytes(anchor_output_script))
+
+@REMOTE
+def update_anchor(address, new_anchor):
+    new_anchor = from_json(new_anchor, bytes)
+    with g.dat:
+        g.dat.execute("UPDATE CHANNELS SET anchor = ? WHERE address = ?", (new_anchor, address))
+    return True
 
 @REMOTE
 def recieve(address, amount):
