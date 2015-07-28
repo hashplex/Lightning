@@ -5,8 +5,8 @@ import create_regnet
 import destroy_regnet
 import time
 
-class TestBitcoind(unittest.TestCase):
-    """Run basic tests on bitcoind."""
+class TestChannel(unittest.TestCase):
+    """Run basic tests on payment channels."""
     def propagate(self):
         """Ensure all nodes up to date."""
         while len(set(tuple(sorted(node.bit.getrawmempool()))
@@ -36,8 +36,8 @@ class TestBitcoind(unittest.TestCase):
         self.assertEqual(self.alice.bit.getbalance(), 100000000)
         self.assertEqual(self.bob.bit.getbalance(), 100000000)
 
-    def test_channel(self):
-        """Test a payment channel."""
+    def test_basic(self):
+        """Test basic operation of a payment channel."""
         self.alice.lit.create(self.bob.lurl, 50000000, 25000000, 5000)
         self.propagate()
         self.assertEqual(self.alice.bit.getbalance(), 49995000)
@@ -56,6 +56,37 @@ class TestBitcoind(unittest.TestCase):
         self.assertEqual(self.bob.bit.getbalance(), 104990000)
         self.assertEqual(self.alice.lit.getbalance(), 94990000)
         self.assertEqual(self.bob.lit.getbalance(), 104990000)
+
+    def test_stress(self):
+        """Test edge cases in payment channels."""
+        self.alice.lit.create(self.bob.lurl, 25000000, 50000000, 5000)
+        self.propagate()
+        self.carol.lit.create(self.alice.lurl, 50000000, 25000000, 5000)
+        self.propagate()
+        self.assertEqual(self.alice.bit.getbalance(), 49990000)
+        self.assertEqual(self.bob.bit.getbalance(), 49995000)
+        self.assertEqual(self.alice.lit.getbalance(), 99990000)
+        self.assertEqual(self.bob.lit.getbalance(), 99995000)
+        self.carol.lit.send(self.alice.lurl, 25000000)
+        self.assertEqual(self.alice.lit.getbalance(), 124990000)
+        self.alice.lit.send(self.carol.lurl, 15000000)
+        self.assertEqual(self.alice.lit.getbalance(), 109990000)
+        self.bob.lit.send(self.alice.lurl, 50000000)
+        self.assertEqual(self.alice.lit.getbalance(), 159990000)
+        self.assertEqual(self.bob.lit.getbalance(), 49995000)
+        self.alice.lit.send(self.bob.lurl, 75000000)
+        self.assertEqual(self.alice.lit.getbalance(), 84990000)
+        self.assertEqual(self.bob.lit.getbalance(), 124995000)
+        self.alice.lit.close(self.bob.lurl)
+        self.propagate()
+        self.assertEqual(self.alice.bit.getbalance(), 49985000)
+        self.assertEqual(self.alice.lit.getbalance(), 84985000)
+        self.assertEqual(self.bob.bit.getbalance(), 124990000)
+        self.assertEqual(self.bob.lit.getbalance(), 124990000)
+        self.alice.lit.close(self.carol.lurl)
+        self.propagate()
+        self.assertEqual(self.alice.bit.getbalance(), 84980000)
+        self.assertEqual(self.alice.lit.getbalance(), 84980000)
 
 if __name__ == '__main__':
     unittest.main()
