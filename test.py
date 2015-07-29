@@ -88,5 +88,45 @@ class TestChannel(unittest.TestCase):
         self.assertEqual(self.alice.bit.getbalance(), 84800000)
         self.assertEqual(self.alice.lit.getbalance(), 84800000)
 
+class TestLightning(unittest.TestCase):
+    """Run basic tests on payment channels."""
+    def propagate(self):
+        """Ensure all nodes up to date."""
+        while len(set(tuple(sorted(node.bit.getrawmempool()))
+                      for node in [self.alice, self.bob, self.carol])) > 1:
+            time.sleep(0.5)
+        self.carol.bit.generate(1)
+        while self.alice.bit.getblockcount() != self.carol.bit.getblockcount():
+            time.sleep(0.5)
+
+    def setUp(self):
+        proxies = create_regnet.main()
+        self.alice, self.bob, self.carol = proxies
+        self.carol.bit.generate(101)
+        self.propagate()
+        self.carol.bit.sendmany(
+            "",
+            {self.alice.bit.getnewaddress(): 100000000,
+             self.bob.bit.getnewaddress(): 100000000,
+            })
+        self.propagate()
+        self.alice.lit.create(self.carol.lurl, 50000000, 50000000, 50000)
+        self.propagate()
+        self.bob.lit.create(self.carol.lurl, 50000000, 50000000, 50000)
+        self.propagate()
+
+    def tearDown(self):
+        pass #destroy_regnet.main()
+
+    def test_setup(self):
+        """Test that the setup worked."""
+        self.assertEqual(self.alice.lit.getbalance(), 99900000)
+        self.assertEqual(self.bob.lit.getbalance(), 99900000)
+
+    def test_payment(self):
+        self.alice.lit.send(self.bob.lurl, 5000000)
+        self.assertEqual(self.alice.lit.getbalance(), 9440000)
+        self.assertEqual(self.bob.lit.getbalance(), 104990000)
+
 if __name__ == '__main__':
     unittest.main()
