@@ -124,6 +124,7 @@ class TestLightning(unittest.TestCase):
         self.assertEqual(self.bob.lit.getbalance(), 99900000)
 
     def test_payment(self):
+        """Test multi-hop payment."""
         self.alice.lit.send(self.bob.lurl, 5000000)
         self.assertEqual(self.alice.lit.getbalance(), 9440000)
         self.assertEqual(self.bob.lit.getbalance(), 104990000)

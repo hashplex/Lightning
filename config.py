@@ -71,4 +71,4 @@ class ProxySet(object):
         self.bit = bitcoin_proxy(datadir=datadir)
         self.lit = lightning_proxy(datadir=datadir)
         lightning_conf = lightning_config(datadir=datadir)
-        self.lurl = 'http://localhost:%d/' % lightning_conf.getint('port')
+        self.lurl = 'http://localhost:%d/channel/' % lightning_conf.getint('port')

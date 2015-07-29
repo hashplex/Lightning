@@ -1,8 +1,8 @@
-"""Private (local) API for a lightning node."""
+"""Micropayment API for a lightning node."""
 
 import jsonrpcproxy
 from jsonrpc.backend.flask import JSONRPCAPI
-from flask import g
+from flask import g, Blueprint
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
@@ -12,11 +12,10 @@ from bitcoin.core.script import OP_CHECKMULTISIG
 from base64 import b64encode, b64decode
 from bitcoin.core.serialize import Serializable
 
-LOCAL_API = JSONRPCAPI()
-REMOTE_API = JSONRPCAPI()
-
-LOCAL = LOCAL_API.dispatcher.add_method
-REMOTE = REMOTE_API.dispatcher.add_method
+API = Blueprint('channel', __name__)
+RPC_API = JSONRPCAPI()
+REMOTE = RPC_API.dispatcher.add_method
+API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])
 
 IDENTITY = lambda arg: arg
 
@@ -117,7 +116,6 @@ def get_pubkey():
     """Get a new pubkey."""
     return g.seckey.pub
 
-@LOCAL
 def create(url, mymoney, theirmoney, fees):
     """Open a payment channel."""
     bob = jsonrpcproxy.Proxy(url)
@@ -150,20 +148,20 @@ def lightning_balance():
 
 def update_db(address, amount):
     """Update the db for a payment."""
-    row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (address,)).fetchone()
+    row = g.dat.execute(
+        "SELECT address, amount from CHANNELS WHERE address = ?", (address,)
+    ).fetchone()
     if row is None:
         raise Exception("Unknown address", address)
-    address, current_amount, anchor, fees, redeem = row
+    address, current_amount = row
     with g.dat:
         g.dat.execute(
             "UPDATE CHANNELS SET amount = ? WHERE address = ?", (current_amount + amount, address))
 
-@LOCAL
 def getbalance():
     """Get the balance including funds locked in payment channels."""
     return lightning_balance() + g.bit.getbalance()
 
-@LOCAL
 def send(url, amount):
     """Send coin in the channel."""
     update_db(url, -amount)
@@ -171,13 +169,12 @@ def send(url, amount):
     bob.recieve(g.addr, amount)
     return True
 
-@LOCAL
 def close(url):
     """Close a channel."""
     bob = jsonrpcproxy.Proxy(url)
     row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (url,)).fetchone()
     if row is None:
-        raise Exception("Unknown address", address)
+        raise Exception("Unknown address", url)
     address, current_amount, anchor, fees, redeem = row
     redeem = CScript(redeem)
     output = CMutableTxOut(
@@ -239,6 +236,7 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change,
 
 @REMOTE
 def update_anchor(address, new_anchor):
+    """Update the anchor txid after both have signed."""
     new_anchor = from_json(new_anchor, bytes)
     with g.dat:
         g.dat.execute("UPDATE CHANNELS SET anchor = ? WHERE address = ?", (new_anchor, address))

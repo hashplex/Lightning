@@ -1,7 +1,7 @@
 """Run a lightning node."""
 
 from flask import Flask
-from flask import request
+from flask import request, url_for
 import bitcoin.rpc
 import jsonrpcproxy
 import config
@@ -10,12 +10,12 @@ from functools import wraps
 from flask import Response
 import os
 import os.path
-from channel import REMOTE_API as PUBLIC_API, LOCAL_API as PRIVATE_API
+import channel
 from flask import g
 import sqlite3
 import hashlib
 from bitcoin.wallet import CBitcoinSecret
-import random
+import local
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -47,11 +47,14 @@ def requires_auth(view):
         return view(*args, **kwargs)
     return decorated
 
+def authenticate_before_request():
+    """before_request callback to perform authentication."""
+    return requires_auth(lambda: None)()
+
 app = Flask(__name__) # pylint: disable=invalid-name
-app.add_url_rule('/', 'PUBLIC_API', PUBLIC_API.as_view(), methods=['POST'])
-app.add_url_rule('/local/', 'PRIVATE_API',
-                 requires_auth(PRIVATE_API.as_view()),
-                 methods=['POST'])
+app.register_blueprint(channel.API, url_prefix='/channel')
+local.API.before_request(authenticate_before_request)
+app.register_blueprint(local.API, url_prefix='/local')
 
 @app.before_request
 def before_request():
@@ -61,7 +64,7 @@ def before_request():
     g.dat = sqlite3.connect(app.config['database_path'])
     secret = hashlib.sha256(app.config['secret']).digest()
     g.seckey = CBitcoinSecret.from_secret_bytes(secret)
-    g.addr = 'http://localhost:%d/' % int(app.config['port'])
+    g.addr = url_for('channel.rpc', _external=True)
 
 @app.teardown_request
 def teardown_request(dummyexception):
