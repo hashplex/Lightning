@@ -106,8 +106,5 @@ def run(conf):
 
     app.config.update(conf)
     app.config['bitcoind'] = config.bitcoin_proxy(datadir=conf['datadir'])
-    app.config['database_path'] = os.path.join(
-        conf['datadir'], 'lightning.dat')
-    if not os.path.isfile(app.config['database_path']):
-        channel.init_db(app.config['database_path'])
+    channel.init(app.config)
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False)

@@ -14,16 +14,20 @@ from bitcoin.core.serialize import Serializable
 from bitcoin.wallet import CBitcoinSecret
 import sqlite3
 import hashlib
+import os.path
 
 API = Blueprint('channel', __name__)
 RPC_API = JSONRPCAPI()
 REMOTE = RPC_API.dispatcher.add_method
 API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])
 
-def init_db(database_path):
+def init(conf):
     """Set up the database."""
-    dat = sqlite3.connect(database_path)
-    dat.execute("CREATE TABLE CHANNELS(address, amount, anchor, fees, redeem)")
+    conf['database_path'] = os.path.join(conf['datadir'], 'channel.dat')
+    if not os.path.isfile(conf['database_path']):
+        dat = sqlite3.connect(conf['database_path'])
+        with dat:
+            dat.execute("CREATE TABLE CHANNELS(address, amount, anchor, fees, redeem)")
 
 def before_request():
     """Set up g context."""
