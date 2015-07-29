@@ -2,7 +2,7 @@
 
 import jsonrpcproxy
 from jsonrpc.backend.flask import JSONRPCAPI
-from flask import g, Blueprint
+from flask import g, Blueprint, current_app, url_for
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
@@ -11,11 +11,39 @@ from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_CHECKMULTISIG
 from base64 import b64encode, b64decode
 from bitcoin.core.serialize import Serializable
+from bitcoin.wallet import CBitcoinSecret
+import sqlite3
+import hashlib
 
 API = Blueprint('channel', __name__)
 RPC_API = JSONRPCAPI()
 REMOTE = RPC_API.dispatcher.add_method
 API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])
+
+def init_db(database_path):
+    """Set up the database."""
+    dat = sqlite3.connect(database_path)
+    dat.execute("CREATE TABLE CHANNELS(address, amount, anchor, fees, redeem)")
+
+def before_request():
+    """Set up g context."""
+    g.config = current_app.config
+    g.bit = g.config['bitcoind']
+    g.dat = sqlite3.connect(g.config['database_path'])
+    secret = hashlib.sha256(g.config['secret']).digest()
+    g.seckey = CBitcoinSecret.from_secret_bytes(secret)
+    g.addr = url_for('channel.rpc', _external=True)
+
+def teardown_request(dummyexception):
+    """Clean up."""
+    dat = getattr(g, 'dat', None)
+    if dat is not None:
+        g.dat.close()
+
+@API.route('/dump')
+def dump():
+    """Dump the DB."""
+    return '\n'.join(line for line in g.dat.iterdump())
 
 IDENTITY = lambda arg: arg
 

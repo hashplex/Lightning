@@ -1,7 +1,7 @@
 """Run a lightning node."""
 
 from flask import Flask
-from flask import request, url_for
+from flask import request
 import bitcoin.rpc
 import jsonrpcproxy
 import config
@@ -11,10 +11,6 @@ from flask import Response
 import os
 import os.path
 import channel
-from flask import g
-import sqlite3
-import hashlib
-from bitcoin.wallet import CBitcoinSecret
 import local
 
 # Copied from http://flask.pocoo.org/snippets/8/
@@ -53,25 +49,10 @@ def authenticate_before_request():
 
 app = Flask(__name__) # pylint: disable=invalid-name
 app.register_blueprint(channel.API, url_prefix='/channel')
+app.before_request(channel.before_request)
+app.teardown_request(channel.teardown_request)
 local.API.before_request(authenticate_before_request)
 app.register_blueprint(local.API, url_prefix='/local')
-
-@app.before_request
-def before_request():
-    """Set up g context."""
-    g.config = app.config
-    g.bit = app.config['bitcoind']
-    g.dat = sqlite3.connect(app.config['database_path'])
-    secret = hashlib.sha256(app.config['secret']).digest()
-    g.seckey = CBitcoinSecret.from_secret_bytes(secret)
-    g.addr = url_for('channel.rpc', _external=True)
-
-@app.teardown_request
-def teardown_request(dummyexception):
-    """Clean up."""
-    dat = getattr(g, 'dat', None)
-    if dat is not None:
-        g.dat.close()
 
 def shutdown_server():
     """Stop the server."""
@@ -102,22 +83,12 @@ def infoweb():
     """Get bitcoind info."""
     return str(app.config['bitcoind'].getinfo())
 
-@app.route('/dump')
-def dump():
-    """Dump the DB."""
-    return '\n'.join(line for line in g.dat.iterdump())
-
 @app.route('/otherinfo')
 def otherinfo():
     """Get remote node info."""
     port = int(request.args.get('port'))
     proxy = jsonrpcproxy.Proxy('http://localhost:%d' % port)
     return str(proxy.info())
-
-def init_db(database_path):
-    """Set up the database."""
-    dat = sqlite3.connect(database_path)
-    dat.execute("CREATE TABLE CHANNELS(address, amount, anchor, fees, redeem)")
 
 def run(conf):
     """Start the server."""
@@ -138,6 +109,5 @@ def run(conf):
     app.config['database_path'] = os.path.join(
         conf['datadir'], 'lightning.dat')
     if not os.path.isfile(app.config['database_path']):
-        init_db(app.config['database_path'])
-
+        channel.init_db(app.config['database_path'])
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False)
