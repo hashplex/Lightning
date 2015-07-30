@@ -58,3 +58,17 @@ def update(next_hop, address, cost):
         bob = jsonrpcproxy.Proxy(peer+'lightning/')
         bob.update(g.addr, address, cost + fees)
     return True
+
+@REMOTE
+def send(url, amount):
+    if url == g.addr:
+        return True
+    row = g.ldat.execute("SELECT nexthop, cost FROM ROUTES WHERE address = ?", (url,)).fetchone()
+    if row is None:
+        channel.send(url, amount)
+    else:
+        next_hop, cost = row
+        channel.send(next_hop, amount + cost)
+        bob = jsonrpcproxy.Proxy(next_hop+'lightning/')
+        bob.send(url, amount)
+    return True

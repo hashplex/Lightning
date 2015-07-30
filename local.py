@@ -10,7 +10,7 @@ REMOTE = RPC_API.dispatcher.add_method
 API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])
 
 REMOTE(channel.create)
-REMOTE(channel.send)
+REMOTE(lightning.send)
 REMOTE(channel.close)
 REMOTE(channel.getbalance)
 

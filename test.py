@@ -126,8 +126,8 @@ class TestLightning(unittest.TestCase):
     def test_payment(self):
         """Test multi-hop payment."""
         self.alice.lit.send(self.bob.lurl, 5000000)
-        self.assertEqual(self.alice.lit.getbalance(), 9440000)
-        self.assertEqual(self.bob.lit.getbalance(), 104990000)
+        self.assertEqual(self.alice.lit.getbalance(), 94850000)
+        self.assertEqual(self.bob.lit.getbalance(), 104900000)
 
 if __name__ == '__main__':
     unittest.main()
