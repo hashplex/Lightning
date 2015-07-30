@@ -4,6 +4,8 @@ from flask import Blueprint, g, current_app, url_for
 from jsonrpc.backend.flask import JSONRPCAPI
 import os.path
 import sqlite3
+import jsonrpcproxy
+import channel
 
 API = Blueprint('lightning', __name__)
 RPC_API = JSONRPCAPI()
@@ -23,7 +25,7 @@ def before_request():
     """Set up g context."""
     g.config = current_app.config
     g.ldat = sqlite3.connect(g.config['lit_data_path'])
-    g.laddr = url_for('lightning.rpc', _external=True)
+    g.logger = current_app.logger
 
 def teardown_request(dummyexception):
     """Clean up."""
@@ -36,20 +38,23 @@ def dump():
     """Dump the DB."""
     return '\n'.join(line for line in g.ldat.iterdump())
 
-def on_open(address, fees):
+@channel.CHANNEL_OPENED.connect_via('channel')
+def on_open(dummy_sender, address, fees, **dummy_args):
+    """Routing update on open."""
     with g.ldat:
         g.ldat.execute("INSERT INTO PEERS VALUES (?, ?)", (address, fees))
-    update(address, fees)
+    update(address, address, 0)
 
 @REMOTE
-def update(address, cost):
+def update(next_hop, address, cost):
+    """Routing update."""
     row = g.ldat.execute("SELECT cost FROM ROUTES WHERE address = ?", (address,)).fetchone()
-    if row is not None and row[0] <= cost:
+    if row is not None and row[0] <= cost or address == g.addr:
         return True
     with g.ldat:
         g.ldat.execute("DELETE FROM ROUTES WHERE address = ?", (address,))
-        g.ldat.execute("INSERT INTO ROUTES VALUES (?, ?, ?)", (address, fees, address))
+        g.ldat.execute("INSERT INTO ROUTES VALUES (?, ?, ?)", (address, cost, next_hop))
     for peer, fees in g.ldat.execute("SELECT address, fees from PEERS"):
-        bob = jsonrpcproxy.Proxy(peer)
-        bob.update(address, cost + fees)
+        bob = jsonrpcproxy.Proxy(peer+'lightning/')
+        bob.update(g.addr, address, cost + fees)
     return True

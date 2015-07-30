@@ -2,7 +2,7 @@
 
 import jsonrpcproxy
 from jsonrpc.backend.flask import JSONRPCAPI
-from flask import g, Blueprint, current_app, url_for
+from flask import g, Blueprint, current_app
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
@@ -15,11 +15,15 @@ from bitcoin.wallet import CBitcoinSecret
 import sqlite3
 import hashlib
 import os.path
+from blinker import Namespace
 
 API = Blueprint('channel', __name__)
 RPC_API = JSONRPCAPI()
 REMOTE = RPC_API.dispatcher.add_method
 API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])
+
+SIGNALS = Namespace()
+CHANNEL_OPENED = SIGNALS.signal('CHANNEL_OPENED')
 
 def init(conf):
     """Set up the database."""
@@ -36,7 +40,7 @@ def before_request():
     g.dat = sqlite3.connect(g.config['database_path'])
     secret = hashlib.sha256(g.config['secret']).digest()
     g.seckey = CBitcoinSecret.from_secret_bytes(secret)
-    g.addr = url_for('channel.rpc', _external=True)
+    g.addr = 'http://localhost:%d/' % int(g.config['port'])
 
 def teardown_request(dummyexception):
     """Clean up."""
@@ -150,7 +154,7 @@ def get_pubkey():
 
 def create(url, mymoney, theirmoney, fees):
     """Open a payment channel."""
-    bob = jsonrpcproxy.Proxy(url)
+    bob = jsonrpcproxy.Proxy(url+'channel/')
     coins, change = select_coins(mymoney + 2 * fees)
     pubkey = get_pubkey()
     transaction, redeem = bob.open_channel(
@@ -169,6 +173,7 @@ def create(url, mymoney, theirmoney, fees):
             "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
             (url, mymoney, transaction.GetHash(), fees, anchor_output_script))
     bob.update_anchor(g.addr, to_json(transaction.GetHash()))
+    CHANNEL_OPENED.send('channel', address=url, fees=fees)
     return True
 
 def lightning_balance():
@@ -197,13 +202,13 @@ def getbalance():
 def send(url, amount):
     """Send coin in the channel."""
     update_db(url, -amount)
-    bob = jsonrpcproxy.Proxy(url)
+    bob = jsonrpcproxy.Proxy(url+'channel/')
     bob.recieve(g.addr, amount)
     return True
 
 def close(url):
     """Close a channel."""
-    bob = jsonrpcproxy.Proxy(url)
+    bob = jsonrpcproxy.Proxy(url+'channel/')
     row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (url,)).fetchone()
     if row is None:
         raise Exception("Unknown address", url)
@@ -263,6 +268,7 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change,
         g.dat.execute(
             "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
             (address, mymoney, transaction.GetHash(), fees, anchor_output_script))
+    CHANNEL_OPENED.send('channel', address=address, fees=fees)
     return (serialize_bytes(transaction.serialize()),
             serialize_bytes(anchor_output_script))
 

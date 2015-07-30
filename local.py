@@ -1,6 +1,6 @@
 """Local (private) API for a lightning node."""
 
-import channel
+import channel, lightning
 from jsonrpc.backend.flask import JSONRPCAPI
 from flask import Blueprint
 

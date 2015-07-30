@@ -112,4 +112,5 @@ def run(conf):
     app.config['bitcoind'] = config.bitcoin_proxy(datadir=conf['datadir'])
     channel.init(app.config)
     lightning.init(app.config)
-    app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False)
+    app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False,
+            processes=3)
