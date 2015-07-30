@@ -21,12 +21,14 @@ def init(conf):
             dat.execute("CREATE TABLE PEERS(address, fees)")
             dat.execute("CREATE TABLE ROUTES(address, cost, nexthop)")
 
+@API.before_app_request
 def before_request():
     """Set up g context."""
     g.config = current_app.config
     g.ldat = sqlite3.connect(g.config['lit_data_path'])
     g.logger = current_app.logger
 
+@API.teardown_app_request
 def teardown_request(dummyexception):
     """Clean up."""
     dat = getattr(g, 'ldat', None)

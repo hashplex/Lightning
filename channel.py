@@ -33,6 +33,7 @@ def init(conf):
         with dat:
             dat.execute("CREATE TABLE CHANNELS(address, amount, anchor, fees, redeem)")
 
+@API.before_app_request
 def before_request():
     """Set up g context."""
     g.config = current_app.config
@@ -42,6 +43,7 @@ def before_request():
     g.seckey = CBitcoinSecret.from_secret_bytes(secret)
     g.addr = 'http://localhost:%d/' % int(g.config['port'])
 
+@API.teardown_app_request
 def teardown_request(dummyexception):
     """Clean up."""
     dat = getattr(g, 'dat', None)

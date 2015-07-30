@@ -50,12 +50,8 @@ def authenticate_before_request():
 
 app = Flask(__name__) # pylint: disable=invalid-name
 app.register_blueprint(channel.API, url_prefix='/channel')
-app.before_request(channel.before_request)
-app.teardown_request(channel.teardown_request)
 local.API.before_request(authenticate_before_request)
 app.register_blueprint(lightning.API, url_prefix='/lightning')
-app.before_request(lightning.before_request)
-app.teardown_request(lightning.teardown_request)
 app.register_blueprint(local.API, url_prefix='/local')
 
 def shutdown_server():
