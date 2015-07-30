@@ -4,7 +4,7 @@ import channel, lightning
 from jsonrpc.backend.flask import JSONRPCAPI
 from flask import Blueprint
 
-API = Blueprint('local', __name__)
+API = Blueprint('local', __name__, url_prefix='/local')
 RPC_API = JSONRPCAPI()
 REMOTE = RPC_API.dispatcher.add_method
 API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])

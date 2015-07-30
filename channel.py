@@ -17,7 +17,7 @@ import hashlib
 import os.path
 from blinker import Namespace
 
-API = Blueprint('channel', __name__)
+API = Blueprint('channel', __name__, url_prefix='/channel')
 RPC_API = JSONRPCAPI()
 REMOTE = RPC_API.dispatcher.add_method
 API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])

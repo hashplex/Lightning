@@ -49,10 +49,10 @@ def authenticate_before_request():
     return requires_auth(lambda: None)()
 
 app = Flask(__name__) # pylint: disable=invalid-name
-app.register_blueprint(channel.API, url_prefix='/channel')
+app.register_blueprint(channel.API)
+app.register_blueprint(lightning.API)
 local.API.before_request(authenticate_before_request)
-app.register_blueprint(lightning.API, url_prefix='/lightning')
-app.register_blueprint(local.API, url_prefix='/local')
+app.register_blueprint(local.API)
 
 def shutdown_server():
     """Stop the server."""

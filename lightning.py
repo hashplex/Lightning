@@ -7,7 +7,7 @@ import sqlite3
 import jsonrpcproxy
 import channel
 
-API = Blueprint('lightning', __name__)
+API = Blueprint('lightning', __name__, url_prefix='/lightning')
 RPC_API = JSONRPCAPI()
 REMOTE = RPC_API.dispatcher.add_method
 API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])
