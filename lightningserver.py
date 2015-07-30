@@ -12,6 +12,7 @@ import os
 import os.path
 import channel
 import local
+import lightning
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -52,6 +53,9 @@ app.register_blueprint(channel.API, url_prefix='/channel')
 app.before_request(channel.before_request)
 app.teardown_request(channel.teardown_request)
 local.API.before_request(authenticate_before_request)
+app.register_blueprint(lightning.API, url_prefix='/lightning')
+app.before_request(lightning.before_request)
+app.teardown_request(lightning.teardown_request)
 app.register_blueprint(local.API, url_prefix='/local')
 
 def shutdown_server():
@@ -107,4 +111,5 @@ def run(conf):
     app.config.update(conf)
     app.config['bitcoind'] = config.bitcoin_proxy(datadir=conf['datadir'])
     channel.init(app.config)
+    lightning.init(app.config)
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False)
