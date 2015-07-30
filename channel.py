@@ -117,7 +117,7 @@ def get_pubkey():
     """Get a new pubkey."""
     return g.seckey.pub
 
-def create(url, mymoney, theirmoney, fees):
+def create(url, mymoney, theirmoney, fees=10000):
     """Open a payment channel."""
     bob = jsonrpcproxy.Proxy(url+'channel/')
     coins, change = select_coins(mymoney + 2 * fees)
@@ -141,13 +141,6 @@ def create(url, mymoney, theirmoney, fees):
     CHANNEL_OPENED.send('channel', address=url, fees=fees)
     return True
 
-def lightning_balance():
-    """Get the balance in lightning channels exclusively."""
-    return sum(
-        row[0]
-        for row in g.dat.execute("SELECT amount, fees FROM CHANNELS")
-        )
-
 def update_db(address, amount):
     """Update the db for a payment."""
     row = g.dat.execute(
@@ -160,9 +153,9 @@ def update_db(address, amount):
         g.dat.execute(
             "UPDATE CHANNELS SET amount = ? WHERE address = ?", (current_amount + amount, address))
 
-def getbalance():
+def getbalance(url):
     """Get the balance including funds locked in payment channels."""
-    return lightning_balance() + g.bit.getbalance()
+    return g.dat.execute("SELECT amount FROM CHANNELS WHERE address = ?", (url,)).fetchone()[0]
 
 def send(url, amount):
     """Send coin in the channel."""
