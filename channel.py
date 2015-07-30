@@ -65,28 +65,6 @@ def deserialize_bytes(b64data):
     """Convert str to bytes."""
     return b64decode(b64data.encode())
 
-class Message(object):
-    """Base class for JSON serializable messages."""
-    fields = []
-    def __init__(self, **kwargs):
-        for arg in kwargs:
-            setattr(self, arg, kwargs[arg])
-
-    def json(self):
-        """Convert message to JSON."""
-        return {
-            field: to_json(field_type, getattr(self, field))
-            for field, field_type in self.fields
-        }
-
-    @classmethod
-    def from_json(cls, json_data):
-        """Convert message from JSON."""
-        self = cls()
-        for field, field_type in cls.fields:
-            setattr(self, field, from_json(field_type, json_data[field]))
-        return self
-
 RAW_JSON_TYPES = [int, str,]
 def to_json(message, field_type=None):
     """Convert a message to JSON"""
@@ -100,8 +78,6 @@ def to_json(message, field_type=None):
         return serialize_bytes(message)
     if issubclass(field_type, Serializable):
         return to_json(message.serialize(), bytes)
-    if issubclass(field_type, Message):
-        return message.json()
     raise Exception("Unable to convert", field_type, message)
 def from_json(message, field_type):
     """Convert a message from JSON"""
@@ -113,20 +89,7 @@ def from_json(message, field_type):
         return field_type(deserialize_bytes(message))
     if issubclass(field_type, Serializable):
         return field_type.deserialize(from_json(message, bytes))
-    if issubclass(field_type, Message):
-        return field_type.from_json(message)
     raise Exception("Unable to convert", field_type, message)
-
-class CreationMessage(Message):
-    """Sent when a channel is opened."""
-    fields = [
-        ('my_money', int),
-        ('your_money', int),
-        ('fees', int),
-        ('my_coins', CMutableTxIn),
-        ('my_change', CMutableTxOut),
-        ('my_pubkey', bytes),
-    ]
 
 def select_coins(amount):
     """Get a txin set and change to spend amount."""

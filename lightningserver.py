@@ -3,7 +3,6 @@
 from flask import Flask
 from flask import request
 import bitcoin.rpc
-import jsonrpcproxy
 import config
 import json
 from functools import wraps
@@ -37,8 +36,6 @@ def requires_auth(view):
         auth = request.authorization
         if not auth or not check_auth(auth.username, auth.password):
             return authenticate()
-        # TODO: handle proxies?
-        # TODO: rpcallowip
         if request.remote_addr != "127.0.0.1":
             return Response("Access outside 127.0.0.1 forbidden", 403)
         return view(*args, **kwargs)
@@ -62,6 +59,7 @@ def shutdown_server():
     func()
 
 @app.route('/error')
+@requires_auth
 def error():
     """Raise an error."""
     raise Exception("Hello")
@@ -79,16 +77,10 @@ def die():
     return "Shutting down..."
 
 @app.route('/info')
+@requires_auth
 def infoweb():
     """Get bitcoind info."""
     return str(app.config['bitcoind'].getinfo())
-
-@app.route('/otherinfo')
-def otherinfo():
-    """Get remote node info."""
-    port = int(request.args.get('port'))
-    proxy = jsonrpcproxy.Proxy('http://localhost:%d' % port)
-    return str(proxy.info())
 
 def run(conf):
     """Start the server."""

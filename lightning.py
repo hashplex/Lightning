@@ -1,6 +1,6 @@
 """Lightning network API for a lightning node."""
 
-from flask import Blueprint, g, current_app, url_for
+from flask import Blueprint, g, current_app
 from jsonrpc.backend.flask import JSONRPCAPI
 import os.path
 import sqlite3
@@ -63,6 +63,7 @@ def update(next_hop, address, cost):
 
 @REMOTE
 def send(url, amount):
+    """Send coin, perhaps through more than one hop."""
     if url == g.addr:
         return True
     row = g.ldat.execute("SELECT nexthop, cost FROM ROUTES WHERE address = ?", (url,)).fetchone()

@@ -21,6 +21,7 @@ regtest=1
 txindex=1
 daemon=1
 listen=1
+relaypriority=0
 
 rpcuser=%(node)s
 rpcpassword=%(password)s
@@ -67,7 +68,7 @@ def main():
             with open(os.path.join(node_dir, 'bitcoin.conf'), 'w') as conf:
                 conf.write(BITCOIN_CONFIGURATION % {
                     'node': node,
-                    'password': node, # insecure, but this is regtest
+                    'password': node,
                     'rpcport': rpcport,
                     'port': port,
                 })
@@ -78,7 +79,7 @@ def main():
             with open(os.path.join(node_dir, 'lightning.conf'), 'w') as conf:
                 conf.write(LIGHTNING_CONFIGURATION % {
                     'node': node,
-                    'password': node, # also insecure
+                    'password': node,
                     'port': lport,
                 })
 
