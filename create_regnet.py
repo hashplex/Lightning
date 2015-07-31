@@ -107,7 +107,7 @@ def main():
                 return True
         return False
     time.sleep(1)
-    proxies = [config.ProxySet(os.path.join(regnet_dir, node))
+    proxies = [config.collect_proxies(os.path.join(regnet_dir, node))
                for node in os.listdir(regnet_dir)]
     while any(loading_wallet(proxy.bit) for proxy in proxies):
         time.sleep(1)

@@ -6,6 +6,7 @@ import os.path
 from configparser import ConfigParser
 import bitcoin.rpc
 import jsonrpcproxy
+from collections import namedtuple
 
 DEFAULT_DATADIR = os.path.expanduser("~/.bitcoin")
 
@@ -63,10 +64,12 @@ def lightning_proxy(args=None, datadir=DEFAULT_DATADIR, conf="lightning.conf"):
         (lightning_conf.get('rpcuser'),
          lightning_conf.get('rpcpassword')))
 
-class ProxySet(object):
-    """Collect all the proxies for one node."""
-    def __init__(self, datadir=DEFAULT_DATADIR):
-        self.bit = bitcoin_proxy(datadir=datadir)
-        self.lit = lightning_proxy(datadir=datadir)
-        lightning_conf = lightning_config(datadir=datadir)
-        self.lurl = 'http://localhost:%d/' % lightning_conf.getint('port')
+ProxySet = namedtuple('ProxySet', ['bit', 'lit', 'lurl'])
+def collect_proxies(datadir=DEFAULT_DATADIR):
+    """Collect proxies for a given node."""
+    self = ProxySet()
+    self.bit = bitcoin_proxy(datadir=datadir)
+    self.lit = lightning_proxy(datadir=datadir)
+    lightning_conf = lightning_config(datadir=datadir)
+    self.lurl = 'http://localhost:%d/' % lightning_conf.getint('port')
+    return self
