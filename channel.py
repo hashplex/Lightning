@@ -17,6 +17,8 @@ getbalance(url)
 close(url)
 - Close the channel with url.
 
+HTLC operation has not yet been defined.
+
 Error conditions have not yet been defined.
 """
 

@@ -1,4 +1,12 @@
-"""Lightning network API for a lightning node."""
+"""Lightning network API for a lightning node.
+
+Interface:
+API -- the Blueprint returned by serverutil.api_factory
+
+send(url, amount)
+- Send amount satoshis to the node identified by url. The url is not
+  necessarily a direct peer.
+"""
 
 import os.path
 import sqlite3
@@ -60,7 +68,11 @@ def update(next_hop, address, cost):
 
 @REMOTE
 def send(url, amount):
-    """Send coin, perhaps through more than one hop."""
+    """Send coin, perhaps through more than one hop.
+
+    After this call, the node at url should have recieved amount satoshis.
+    Any fees should be collected from this node's balance.
+    """
     if url == g.addr:
         return True
     row = g.ldat.execute("SELECT nexthop, cost FROM ROUTES WHERE address = ?", (url,)).fetchone()
