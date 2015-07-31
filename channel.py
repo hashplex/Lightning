@@ -1,4 +1,26 @@
-"""Micropayment API for a lightning node."""
+"""Micropayment channel API for a lightning node.
+
+Interface:
+API -- the Blueprint returned by serverutil.api_factory
+
+CHANNEL_OPENED -- a blinker signal sent when a channel is opened.
+Arguments:
+- address -- the url of the counterparty
+- fees -- how many satoshis in fees we will require when relaying payment
+This needs refactoring
+
+create(url, mymoney, theirmoney)
+- Open a channel with the node identified by url,
+  where you can send mymoney satoshis, and recieve theirmoney satoshis.
+send(url, amount)
+- Update a channel by sending amount satoshis to the node at url.
+getbalance(url)
+- Return the number of satoshis you can send in the channel with url.
+close(url)
+- Close the channel with url.
+
+Error conditions have not yet been defined.
+"""
 
 import os.path
 import sqlite3
@@ -29,12 +51,12 @@ def init(conf):
 
 @API.before_app_request
 def before_request():
-    """Set up g context."""
+    """Set up database connection."""
     g.dat = sqlite3.connect(g.config['database_path'])
 
 @API.teardown_app_request
 def teardown_request(dummyexception):
-    """Clean up."""
+    """Close database connection."""
     dat = getattr(g, 'dat', None)
     if dat is not None:
         g.dat.close()
@@ -71,8 +93,26 @@ def get_pubkey():
     """Get a new pubkey."""
     return g.seckey.pub
 
+def update_db(address, amount):
+    """Update the db for a payment."""
+    row = g.dat.execute(
+        "SELECT address, amount from CHANNELS WHERE address = ?", (address,)
+    ).fetchone()
+    if row is None:
+        raise Exception("Unknown address", address)
+    address, current_amount = row
+    with g.dat:
+        g.dat.execute(
+            "UPDATE CHANNELS SET amount = ? WHERE address = ?", (current_amount + amount, address))
+
 def create(url, mymoney, theirmoney, fees=10000):
-    """Open a payment channel."""
+    """Open a payment channel.
+
+    After this method returns, a payment channel will have been established
+    with the node identified by url, in which you can send mymoney satoshis
+    and recieve theirmoney satoshis. Any blockchain fees involved in the
+    setup and teardown of the channel should be collected at this time.
+    """
     bob = jsonrpcproxy.Proxy(url+'channel/')
     coins, change = select_coins(mymoney + 2 * fees)
     pubkey = get_pubkey()
@@ -94,31 +134,32 @@ def create(url, mymoney, theirmoney, fees=10000):
     CHANNEL_OPENED.send('channel', address=url, fees=fees)
     return True
 
-def update_db(address, amount):
-    """Update the db for a payment."""
-    row = g.dat.execute(
-        "SELECT address, amount from CHANNELS WHERE address = ?", (address,)
-    ).fetchone()
-    if row is None:
-        raise Exception("Unknown address", address)
-    address, current_amount = row
-    with g.dat:
-        g.dat.execute(
-            "UPDATE CHANNELS SET amount = ? WHERE address = ?", (current_amount + amount, address))
-
-def getbalance(url):
-    """Get the balance including funds locked in payment channels."""
-    return g.dat.execute("SELECT amount FROM CHANNELS WHERE address = ?", (url,)).fetchone()[0]
-
 def send(url, amount):
-    """Send coin in the channel."""
+    """Send coin in the channel.
+
+    Negotiate the update of the channel opened with node url paying that node
+    amount more satoshis than before. No fees should be collected by this
+    method.
+    """
     update_db(url, -amount)
     bob = jsonrpcproxy.Proxy(url+'channel/')
     bob.recieve(g.addr, amount)
     return True
 
+def getbalance(url):
+    """Get the balance of funds in a payment channel.
+
+    This returns the number of satoshis you can spend in the channel
+    with the node at url. This should have no side effects.
+    """
+    return g.dat.execute("SELECT amount FROM CHANNELS WHERE address = ?", (url,)).fetchone()[0]
+
 def close(url):
-    """Close a channel."""
+    """Close a channel.
+
+    Close the currently open channel with node url. Any funds in the channel
+    are paid to the wallet, along with any fees collected by create which
+    were unnecessary."""
     bob = jsonrpcproxy.Proxy(url+'channel/')
     row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (url,)).fetchone()
     if row is None:
