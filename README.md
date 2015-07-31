@@ -18,6 +18,7 @@ This code has not yet been released. I would like to use a very permissive licen
 Usage
 -----
 
+Grab a bitcoind executable and put it in the directory.
 This project uses Python 3.
 Set up a virtualenv and install from `requirements.txt`. Tests can be run as `python -m unittest` To set up a regtest network, run `python create_regnet.py`.
 Read `test.py` for examples of usage
