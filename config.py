@@ -67,9 +67,8 @@ def lightning_proxy(args=None, datadir=DEFAULT_DATADIR, conf="lightning.conf"):
 ProxySet = namedtuple('ProxySet', ['bit', 'lit', 'lurl'])
 def collect_proxies(datadir=DEFAULT_DATADIR):
     """Collect proxies for a given node."""
-    self = ProxySet()
-    self.bit = bitcoin_proxy(datadir=datadir)
-    self.lit = lightning_proxy(datadir=datadir)
+    bit = bitcoin_proxy(datadir=datadir)
+    lit = lightning_proxy(datadir=datadir)
     lightning_conf = lightning_config(datadir=datadir)
-    self.lurl = 'http://localhost:%d/' % lightning_conf.getint('port')
-    return self
+    lurl = 'http://localhost:%d/' % lightning_conf.getint('port')
+    return ProxySet(bit, lit, lurl)
