@@ -37,8 +37,9 @@ def dump():
     return '\n'.join(line for line in g.ldat.iterdump())
 
 @channel.CHANNEL_OPENED.connect_via('channel')
-def on_open(dummy_sender, address, fees, **dummy_args):
+def on_open(dummy_sender, address, **dummy_args):
     """Routing update on open."""
+    fees = 10000
     with g.ldat:
         g.ldat.execute("INSERT INTO PEERS VALUES (?, ?)", (address, fees))
     update(address, address, 0)

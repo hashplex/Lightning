@@ -6,8 +6,6 @@ API -- the Blueprint returned by serverutil.api_factory
 CHANNEL_OPENED -- a blinker signal sent when a channel is opened.
 Arguments:
 - address -- the url of the counterparty
-- fees -- how many satoshis in fees we will require when relaying payment
-This needs refactoring
 
 create(url, mymoney, theirmoney)
 - Open a channel with the node identified by url,
@@ -131,7 +129,7 @@ def create(url, mymoney, theirmoney, fees=10000):
             "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
             (url, mymoney, transaction.GetHash(), fees, anchor_output_script))
     bob.update_anchor(g.addr, to_json(transaction.GetHash()))
-    CHANNEL_OPENED.send('channel', address=url, fees=fees)
+    CHANNEL_OPENED.send('channel', address=url)
     return True
 
 def send(url, amount):
@@ -217,7 +215,7 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change,
         g.dat.execute(
             "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
             (address, mymoney, transaction.GetHash(), fees, anchor_output_script))
-    CHANNEL_OPENED.send('channel', address=address, fees=fees)
+    CHANNEL_OPENED.send('channel', address=address)
     return (to_json(transaction), to_json(anchor_output_script))
 
 @REMOTE
