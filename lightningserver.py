@@ -1,54 +1,20 @@
 """Run a lightning node."""
 
-from flask import Flask, current_app
+from flask import Flask
 from flask import request
 import bitcoin.rpc
 import config
 import json
-from functools import wraps
-from flask import Response
 import os
 import os.path
 import channel
 import local
 import lightning
-
-# Copied from http://flask.pocoo.org/snippets/8/
-def check_auth(username, password):
-    """This function is called to check if a username /
-    password combination is valid.
-    """
-    return (username == current_app.config['rpcuser'] and
-            password == current_app.config['rpcpassword'])
-
-def authenticate():
-    """Sends a 401 response that enables basic auth"""
-    return Response(
-        'Could not verify your access level for that URL.\n'
-        'You have to login with proper credentials', 401,
-        {'WWW-Authenticate': 'Basic realm="Login Required"'})
-
-def requires_auth(view):
-    """Require basic authentication on requests to this view."""
-    @wraps(view)
-    def decorated(*args, **kwargs):
-        """Decorated version of view that checks authentication."""
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return authenticate()
-        if request.remote_addr != "127.0.0.1":
-            return Response("Access outside 127.0.0.1 forbidden", 403)
-        return view(*args, **kwargs)
-    return decorated
-
-def authenticate_before_request():
-    """before_request callback to perform authentication."""
-    return requires_auth(lambda: None)()
+from serverutil import requires_auth
 
 app = Flask(__name__) # pylint: disable=invalid-name
 app.register_blueprint(channel.API)
 app.register_blueprint(lightning.API)
-local.API.before_request(authenticate_before_request)
 app.register_blueprint(local.API)
 
 def shutdown_server():

@@ -1,8 +1,7 @@
 """Micropayment API for a lightning node."""
 
 import jsonrpcproxy
-from jsonrpc.backend.flask import JSONRPCAPI
-from flask import g, Blueprint, current_app
+from flask import g, current_app
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
@@ -16,12 +15,9 @@ import sqlite3
 import hashlib
 import os.path
 from blinker import Namespace
+from serverutil import api_factory
 
-# TODO: move flask and sqlite code back into the server
-API = Blueprint('channel', __name__, url_prefix='/channel')
-RPC_API = JSONRPCAPI()
-REMOTE = RPC_API.dispatcher.add_method
-API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])
+API, REMOTE = api_factory('channel')
 
 SIGNALS = Namespace()
 CHANNEL_OPENED = SIGNALS.signal('CHANNEL_OPENED')

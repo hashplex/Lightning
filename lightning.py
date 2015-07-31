@@ -1,16 +1,13 @@
 """Lightning network API for a lightning node."""
 
-from flask import Blueprint, g, current_app
-from jsonrpc.backend.flask import JSONRPCAPI
+from flask import g, current_app
 import os.path
 import sqlite3
 import jsonrpcproxy
 import channel
+from serverutil import api_factory
 
-API = Blueprint('lightning', __name__, url_prefix='/lightning')
-RPC_API = JSONRPCAPI()
-REMOTE = RPC_API.dispatcher.add_method
-API.add_url_rule('/', 'rpc', RPC_API.as_view(), methods=['POST'])
+API, REMOTE = api_factory('lightning')
 
 def init(conf):
     """Set up the database."""
