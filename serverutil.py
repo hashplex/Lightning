@@ -1,4 +1,13 @@
-"""Utility functions for the server."""
+"""Utility functions for the server.
+
+This includes the interface from the server implementation to the
+payment channel and lightning network APIs.
+
+requires_auth -- decorator which makes a view function require authentication
+authenticate_before_request -- a before_request callback for auth
+api_factory -- returns a flask Blueprint or equivalent, along with a decorator
+               making functions availiable as RPCs.
+"""
 
 from functools import wraps
 from base64 import b64encode, b64decode
@@ -40,7 +49,10 @@ def authenticate_before_request():
     return requires_auth(lambda: None)()
 
 def api_factory(name):
-    """Construct a Blueprint and a REMOTE decorator to set up an API."""
+    """Construct a Blueprint and a REMOTE decorator to set up an API.
+
+    RPC calls are availiable at the url /name/
+    """
     api = Blueprint(name, __name__, url_prefix='/'+name)
     rpc_api = JSONRPCAPI()
     api.add_url_rule('/', 'rpc', rpc_api.as_view(), methods=['POST'])
