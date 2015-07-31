@@ -1,8 +1,11 @@
 """Utility functions for the server."""
 
 from functools import wraps
+from base64 import b64encode, b64decode
 from flask import current_app, Response, request, Blueprint
 from jsonrpc.backend.flask import JSONRPCAPI
+from bitcoin.core import CMutableTransaction
+from bitcoin.core.serialize import Serializable
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
@@ -42,3 +45,42 @@ def api_factory(name):
     rpc_api = JSONRPCAPI()
     api.add_url_rule('/', 'rpc', rpc_api.as_view(), methods=['POST'])
     return api, rpc_api.dispatcher.add_method
+
+def serialize_bytes(bytedata):
+    """Convert bytes to str."""
+    return b64encode(bytedata).decode()
+
+def deserialize_bytes(b64data):
+    """Convert str to bytes."""
+    return b64decode(b64data.encode())
+
+RAW_JSON_TYPES = [int, str,]
+def to_json(message, field_type=None):
+    """Convert a message to JSON"""
+    if isinstance(message, list):
+        return [to_json(sub, field_type) for sub in message]
+    if field_type == None:
+        field_type = type(message)
+    if field_type in RAW_JSON_TYPES:
+        return message
+    if issubclass(field_type, bytes):
+        return serialize_bytes(message)
+    if issubclass(field_type, Serializable):
+        return to_json(message.serialize(), bytes)
+    raise Exception("Unable to convert", field_type, message)
+
+def from_json(message, field_type):
+    """Convert a message from JSON"""
+    if isinstance(message, list):
+        return [from_json(sub, field_type) for sub in message]
+    if field_type in RAW_JSON_TYPES:
+        return message
+    if issubclass(field_type, bytes):
+        return field_type(deserialize_bytes(message))
+    if issubclass(field_type, CMutableTransaction):
+        # vin and vout remain immutable after deserialize
+        return field_type.from_tx(
+            field_type.deserialize(from_json(message, bytes)))
+    if issubclass(field_type, Serializable):
+        return field_type.deserialize(from_json(message, bytes))
+    raise Exception("Unable to convert", field_type, message)
