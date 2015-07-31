@@ -4,14 +4,14 @@
 
 import os
 import os.path
+import shutil
 import subprocess
 import itertools
-import shutil
+import time
+import bitcoin
+import bitcoin.rpc
 import config
 import destroy_regnet
-import time
-import bitcoin.rpc
-import bitcoin
 bitcoin.SelectParams('regtest')
 
 BITCOIN_CONFIGURATION = """\

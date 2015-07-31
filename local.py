@@ -1,7 +1,7 @@
 """Local (private) API for a lightning node."""
 
-import channel, lightning
 from serverutil import api_factory, authenticate_before_request
+import channel, lightning
 
 API, REMOTE = api_factory('local')
 

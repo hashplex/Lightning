@@ -2,8 +2,8 @@
 
 """A simple json-rpc service proxy with automatic method generation."""
 
-import requests
 import json
+import requests
 
 class JSONResponseException(Exception):
     """Exception returned from RPC call"""

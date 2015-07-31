@@ -2,11 +2,11 @@
 
 """Parse configuration and start lightningserver."""
 
+import os.path
 import argparse
 import daemon
-import os.path
-import config
 import daemon.pidfile
+import config
 
 def run(conf):
     """Start lightningserver"""

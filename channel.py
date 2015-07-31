@@ -1,20 +1,20 @@
 """Micropayment API for a lightning node."""
 
-import jsonrpcproxy
+import os.path
+from base64 import b64encode, b64decode
+import hashlib
+import sqlite3
 from flask import g, current_app
+from blinker import Namespace
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.scripteval import VerifyScriptError
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_CHECKMULTISIG
-from base64 import b64encode, b64decode
 from bitcoin.core.serialize import Serializable
 from bitcoin.wallet import CBitcoinSecret
-import sqlite3
-import hashlib
-import os.path
-from blinker import Namespace
+import jsonrpcproxy
 from serverutil import api_factory
 
 API, REMOTE = api_factory('channel')

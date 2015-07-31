@@ -1,11 +1,11 @@
 """Lightning network API for a lightning node."""
 
-from flask import g, current_app
 import os.path
 import sqlite3
+from flask import g, current_app
 import jsonrpcproxy
-import channel
 from serverutil import api_factory
+import channel
 
 API, REMOTE = api_factory('lightning')
 

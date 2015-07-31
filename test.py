@@ -1,9 +1,8 @@
 """Integration testing."""
 
 import unittest
-import create_regnet
-import destroy_regnet
 import time
+import create_regnet
 
 class TestChannel(unittest.TestCase):
     """Run basic tests on payment channels."""

@@ -1,16 +1,16 @@
 """Run a lightning node."""
 
+import os
+import os.path
+import json
 from flask import Flask
 from flask import request
 import bitcoin.rpc
 import config
-import json
-import os
-import os.path
-import channel
-import local
-import lightning
 from serverutil import requires_auth
+import channel
+import lightning
+import local
 
 app = Flask(__name__) # pylint: disable=invalid-name
 app.register_blueprint(channel.API)
