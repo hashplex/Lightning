@@ -6,6 +6,8 @@ API -- the Blueprint returned by serverutil.api_factory
 send(url, amount)
 - Send amount satoshis to the node identified by url. The url is not
   necessarily a direct peer.
+
+Error conditions have not been defined.
 """
 
 import os.path

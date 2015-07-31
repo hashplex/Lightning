@@ -161,10 +161,12 @@ def close(url):
     are paid to the wallet, along with any fees collected by create which
     were unnecessary."""
     bob = jsonrpcproxy.Proxy(url+'channel/')
-    row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (url,)).fetchone()
+    row = g.dat.execute(
+        "SELECT amount, anchor, redeem from CHANNELS WHERE address = ?",
+        (url,)).fetchone()
     if row is None:
         raise Exception("Unknown address", url)
-    address, current_amount, anchor, fees, redeem = row
+    current_amount, anchor, redeem = row
     redeem = CScript(redeem)
     output = CMutableTxOut(
         current_amount, g.bit.getnewaddress().to_scriptPubKey())
@@ -198,8 +200,7 @@ def get_address():
     return str(g.bit.getnewaddress())
 
 @REMOTE
-def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change,
-                 their_pubkey):
+def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, their_pubkey): # pylint: disable=too-many-arguments
     """Open a payment channel."""
     their_coins = from_json(their_coins, CMutableTxIn)
     their_change = from_json(their_change, CMutableTxOut)
@@ -238,10 +239,12 @@ def recieve(address, amount):
 def close_channel(address, their_output):
     """Close a channel."""
     their_output = from_json(their_output, CMutableTxOut)
-    row = g.dat.execute("SELECT * from CHANNELS WHERE address = ?", (address,)).fetchone()
+    row = g.dat.execute(
+        "SELECT amount, anchor, redeem from CHANNELS WHERE address = ?",
+        (address,)).fetchone()
     if row is None:
         raise Exception("Unknown address", address)
-    address, current_amount, anchor, fees, redeem = row
+    current_amount, anchor, redeem = row
     redeem = CScript(redeem)
     output = CMutableTxOut(
         current_amount, g.bit.getnewaddress().to_scriptPubKey())
