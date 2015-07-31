@@ -1,6 +1,6 @@
 """Run a lightning node."""
 
-from flask import Flask
+from flask import Flask, current_app
 from flask import request
 import bitcoin.rpc
 import config
@@ -18,8 +18,8 @@ def check_auth(username, password):
     """This function is called to check if a username /
     password combination is valid.
     """
-    return (username == app.config['rpcuser'] and
-            password == app.config['rpcpassword'])
+    return (username == current_app.config['rpcuser'] and
+            password == current_app.config['rpcpassword'])
 
 def authenticate():
     """Sends a 401 response that enables basic auth"""

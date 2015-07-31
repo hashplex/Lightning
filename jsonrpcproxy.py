@@ -36,11 +36,10 @@ class Proxy(object): # pylint: disable=too-few-public-methods
 
         self._id += 1
 
-        if 'error' in response is not None:
+        if 'error' in response:
             raise JSONResponseException(response['error'])
         elif 'result' not in response:
-            raise JSONRPCError({
-                'code': -343, 'message': 'missing JSON-RPC result'})
+            raise JSONRPCError('missing JSON RPC result')
         else:
             return response['result']
 
@@ -48,18 +47,9 @@ class Proxy(object): # pylint: disable=too-few-public-methods
         """Perform the request."""
         return requests.post(self.url, data=data, headers=self.headers).json()
 
-    # copied from python-bitcoinlib
     def __getattr__(self, name):
         """Generate method stubs as needed."""
-        if name.startswith('__') and name.endswith('__'):
-            # Python internal stuff
-            raise AttributeError
-
-        # Create a callable to do the actual call
         func = lambda *args, **kwargs: self._call(name, *args, **kwargs)
-
-        # Make debuggers show <function bitcoin.rpc.name> rather than <function
-        # bitcoin.rpc.<lambda>>
         func.__name__ = name
         return func
 

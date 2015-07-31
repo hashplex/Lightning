@@ -17,6 +17,7 @@ import hashlib
 import os.path
 from blinker import Namespace
 
+# TODO: move flask and sqlite code back into the server
 API = Blueprint('channel', __name__, url_prefix='/channel')
 RPC_API = JSONRPCAPI()
 REMOTE = RPC_API.dispatcher.add_method
