@@ -3,9 +3,10 @@
 import os
 import os.path
 import json
-from flask import Flask
-from flask import request
+import hashlib
+from flask import Flask, request, current_app, g
 import bitcoin.rpc
+from bitcoin.wallet import CBitcoinSecret
 import config
 from serverutil import requires_auth
 import channel
@@ -13,16 +14,20 @@ import lightning
 import local
 
 app = Flask(__name__) # pylint: disable=invalid-name
+
+@app.before_request
+def before_request():
+    """Setup g context"""
+    g.config = current_app.config
+    g.bit = g.config['bitcoind']
+    secret = hashlib.sha256(g.config['secret']).digest()
+    g.seckey = CBitcoinSecret.from_secret_bytes(secret)
+    g.addr = 'http://localhost:%d/' % int(g.config['port'])
+    g.logger = current_app.logger
+
 app.register_blueprint(channel.API)
 app.register_blueprint(lightning.API)
 app.register_blueprint(local.API)
-
-def shutdown_server():
-    """Stop the server."""
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    func()
 
 @app.route('/error')
 @requires_auth
@@ -34,13 +39,6 @@ def error():
 def get_my_ip():
     """Return remote_addr."""
     return json.dumps({'ip': request.remote_addr}), 200
-
-@app.route('/die')
-@requires_auth
-def die():
-    """Stop the server."""
-    shutdown_server()
-    return "Shutting down..."
 
 @app.route('/info')
 @requires_auth

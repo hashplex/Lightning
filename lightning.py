@@ -2,9 +2,9 @@
 
 import os.path
 import sqlite3
-from flask import g, current_app
+from flask import g
 import jsonrpcproxy
-from serverutil import api_factory
+from serverutil import api_factory, requires_auth
 import channel
 
 API, REMOTE = api_factory('lightning')
@@ -21,9 +21,7 @@ def init(conf):
 @API.before_app_request
 def before_request():
     """Set up g context."""
-    g.config = current_app.config
     g.ldat = sqlite3.connect(g.config['lit_data_path'])
-    g.logger = current_app.logger
 
 @API.teardown_app_request
 def teardown_request(dummyexception):
@@ -33,6 +31,7 @@ def teardown_request(dummyexception):
         g.ldat.close()
 
 @API.route('/dump')
+@requires_auth
 def dump():
     """Dump the DB."""
     return '\n'.join(line for line in g.ldat.iterdump())

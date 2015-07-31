@@ -26,7 +26,6 @@ def main():
     add_switch('daemon')
     add_switch('debug')
     parser.add_argument('-port')
-    parser.add_argument('-rpcport')
 
     args = parser.parse_args()
 

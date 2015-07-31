@@ -2,9 +2,8 @@
 
 import os.path
 from base64 import b64encode, b64decode
-import hashlib
 import sqlite3
-from flask import g, current_app
+from flask import g
 from blinker import Namespace
 from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
@@ -13,9 +12,8 @@ from bitcoin.core.scripteval import VerifyScriptError
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_CHECKMULTISIG
 from bitcoin.core.serialize import Serializable
-from bitcoin.wallet import CBitcoinSecret
 import jsonrpcproxy
-from serverutil import api_factory
+from serverutil import api_factory, requires_auth
 
 API, REMOTE = api_factory('channel')
 
@@ -33,12 +31,7 @@ def init(conf):
 @API.before_app_request
 def before_request():
     """Set up g context."""
-    g.config = current_app.config
-    g.bit = g.config['bitcoind']
     g.dat = sqlite3.connect(g.config['database_path'])
-    secret = hashlib.sha256(g.config['secret']).digest()
-    g.seckey = CBitcoinSecret.from_secret_bytes(secret)
-    g.addr = 'http://localhost:%d/' % int(g.config['port'])
 
 @API.teardown_app_request
 def teardown_request(dummyexception):
@@ -48,6 +41,7 @@ def teardown_request(dummyexception):
         g.dat.close()
 
 @API.route('/dump')
+@requires_auth
 def dump():
     """Dump the DB."""
     return '\n'.join(line for line in g.dat.iterdump())
