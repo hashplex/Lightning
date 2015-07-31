@@ -11,7 +11,6 @@ class JSONResponseException(Exception):
 class JSONRPCError(Exception):
     """Error making RPC call"""
 
-# TODO: proper money handling? might belong in the server
 class Proxy(object): # pylint: disable=too-few-public-methods
     """Remote method call proxy."""
     def __init__(self, url):

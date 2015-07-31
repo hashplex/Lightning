@@ -7,7 +7,6 @@ from configparser import ConfigParser
 import bitcoin.rpc
 import jsonrpcproxy
 
-# TODO: change by OS
 DEFAULT_DATADIR = os.path.expanduser("~/.bitcoin")
 
 def get_config(args=None, path=None, defaults=None):
@@ -30,7 +29,6 @@ def get_config(args=None, path=None, defaults=None):
     return config['config']
 
 BITCOIN_DEFAULTS = {
-    # TODO: add default config
 }
 def bitcoin_config(args=None, datadir=DEFAULT_DATADIR, conf="bitcoin.conf"):
     """Parse and return bitcoin config."""
