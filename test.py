@@ -1,8 +1,12 @@
 """Integration testing."""
 
+import os.path
 import unittest
 import time
+from bitcoin.core import CMutableTransaction
 import create_regnet
+from destroy_regnet import stop
+from serverutil import from_json
 
 class TestChannel(unittest.TestCase):
     """Run basic tests on payment channels."""
@@ -89,6 +93,33 @@ class TestChannel(unittest.TestCase):
         self.alice.lit.close(self.carol.lurl)
         self.propagate()
         self.assertGreaterEqual(self.alice.bit.getbalance(), 85000000 - afee)
+
+    def test_malicious(self):
+        """Test recovery from a malicious counterparty."""
+        self.alice.lit.create(self.bob.lurl, 50000000, 25000000)
+        self.propagate()
+        afee = 50000000 - self.alice.bit.getbalance()
+        bfee = 75000000 - self.bob.bit.getbalance()
+        self.assertGreaterEqual(afee, 0)
+        self.assertGreaterEqual(bfee, 0)
+        self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 50000000)
+        self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 25000000)
+        self.bob.lit.send(self.alice.lurl, 5000000)
+        self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 55000000)
+        self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 20000000)
+        commitment = self.alice.lit.getcommitmenttransactions(self.bob.lurl)
+        commitment = [from_json(transaction, CMutableTransaction)
+                      for transaction in commitment]
+        self.alice.lit.send(self.bob.lurl, 10000000)
+        self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 45000000)
+        self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 30000000)
+        stop(self.alice.lpid)
+        for transaction in commitment:
+            self.alice.bit.sendrawtransaction(transaction)
+            self.propagate()
+        time.sleep(1)
+        self.propagate()
+        self.assertGreaterEqual(self.bob.bit.getbalance(), 150000000 - bfee)
 
 class TestLightning(unittest.TestCase):
     """Run basic tests on payment channels."""

@@ -9,5 +9,6 @@ REMOTE(channel.create)
 REMOTE(lightning.send)
 REMOTE(channel.close)
 REMOTE(channel.getbalance)
+REMOTE(channel.getcommitmenttransactions)
 
 API.before_request(authenticate_before_request)

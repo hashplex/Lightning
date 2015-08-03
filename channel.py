@@ -16,6 +16,8 @@ getbalance(url)
 - Return the number of satoshis you can send in the channel with url.
 close(url)
 - Close the channel with url.
+getcommitmenttransactions(url)
+- Return a list of the commitment transactions in a payment channel
 
 HTLC operation has not yet been defined.
 
@@ -153,6 +155,10 @@ def getbalance(url):
     with the node at url. This should have no side effects.
     """
     return g.dat.execute("SELECT amount FROM CHANNELS WHERE address = ?", (url,)).fetchone()[0]
+
+def getcommitmenttransactions(url):
+    """Get the current commitment transactions in a payment channel."""
+    return []
 
 def close(url):
     """Close a channel.

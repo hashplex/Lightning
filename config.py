@@ -64,11 +64,12 @@ def lightning_proxy(args=None, datadir=DEFAULT_DATADIR, conf="lightning.conf"):
         (lightning_conf.get('rpcuser'),
          lightning_conf.get('rpcpassword')))
 
-ProxySet = namedtuple('ProxySet', ['bit', 'lit', 'lurl'])
+ProxySet = namedtuple('ProxySet', ['bit', 'lit', 'lurl', 'lpid'])
 def collect_proxies(datadir=DEFAULT_DATADIR):
     """Collect proxies for a given node."""
     bit = bitcoin_proxy(datadir=datadir)
     lit = lightning_proxy(datadir=datadir)
     lightning_conf = lightning_config(datadir=datadir)
     lurl = 'http://localhost:%d/' % lightning_conf.getint('port')
-    return ProxySet(bit, lit, lurl)
+    lpid = os.path.join(datadir, 'lightning.pid')
+    return ProxySet(bit, lit, lurl, lpid)
