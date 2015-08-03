@@ -4,6 +4,7 @@
 
 import json
 import requests
+from serverutil import to_json, from_json
 
 class JSONResponseException(Exception):
     """Exception returned from RPC call"""
@@ -20,6 +21,7 @@ class Proxy(object): # pylint: disable=too-few-public-methods
 
     def _call(self, name, *args, **kwargs):
         """Call a method."""
+        args, kwargs = to_json(args), to_json(kwargs)
         assert not (args and kwargs)
         payload = {
             'method': name,
@@ -36,11 +38,11 @@ class Proxy(object): # pylint: disable=too-few-public-methods
         self._id += 1
 
         if 'error' in response:
-            raise JSONResponseException(response['error'])
+            raise JSONResponseException(from_json(response['error']))
         elif 'result' not in response:
             raise JSONRPCError('missing JSON RPC result')
         else:
-            return response['result']
+            return from_json(response['result'])
 
     def _request(self, data):
         """Perform the request."""

@@ -36,7 +36,6 @@ from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_CHECKMULTISIG
 import jsonrpcproxy
 from serverutil import api_factory, requires_auth
-from serverutil import to_json, from_json
 
 API, REMOTE = api_factory('channel')
 
@@ -120,10 +119,10 @@ def create(url, mymoney, theirmoney, fees=10000):
     pubkey = get_pubkey()
     transaction, redeem = bob.open_channel(
         g.addr, theirmoney, mymoney, fees,
-        to_json(coins), to_json(change),
-        to_json(pubkey))
-    transaction = from_json(transaction, CMutableTransaction)
-    anchor_output_script = from_json(redeem, CScript)
+        coins, change,
+        pubkey)
+    transaction = transaction
+    anchor_output_script = redeem
     transaction = g.bit.signrawtransaction(transaction)
     assert transaction['complete']
     transaction = transaction['tx']
@@ -132,9 +131,8 @@ def create(url, mymoney, theirmoney, fees=10000):
         g.dat.execute(
             "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
             (url, mymoney, transaction.GetHash(), fees, anchor_output_script))
-    bob.update_anchor(g.addr, to_json(transaction.GetHash()))
+    bob.update_anchor(g.addr, transaction.GetHash())
     CHANNEL_OPENED.send('channel', address=url)
-    return True
 
 def send(url, amount):
     """Send coin in the channel.
@@ -146,7 +144,6 @@ def send(url, amount):
     update_db(url, -amount)
     bob = jsonrpcproxy.Proxy(url+'channel/')
     bob.recieve(g.addr, amount)
-    return True
 
 def getbalance(url):
     """Get the balance of funds in a payment channel.
@@ -176,10 +173,10 @@ def close(url):
     redeem = CScript(redeem)
     output = CMutableTxOut(
         current_amount, g.bit.getnewaddress().to_scriptPubKey())
-    transaction, bob_sig = bob.close_channel(g.addr, to_json(output))
-    transaction = from_json(transaction, CMutableTransaction)
+    transaction, bob_sig = bob.close_channel(g.addr, output)
+    transaction = transaction
     anchor = transaction.vin[0]
-    bob_sig = from_json(bob_sig, bytes)
+    bob_sig = bob_sig
     sighash = SignatureHash(redeem, transaction, 0, SIGHASH_ALL)
     sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
     anchor.scriptSig = CScript([0, bob_sig, sig, redeem])
@@ -193,7 +190,6 @@ def close(url):
     g.bit.sendrawtransaction(transaction)
     with g.dat:
         g.dat.execute("DELETE FROM CHANNELS WHERE address = ?", (url,))
-    return True
 
 @REMOTE
 def info():
@@ -208,9 +204,6 @@ def get_address():
 @REMOTE
 def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, their_pubkey): # pylint: disable=too-many-arguments
     """Open a payment channel."""
-    their_coins = from_json(their_coins, CMutableTxIn)
-    their_change = from_json(their_change, CMutableTxOut)
-    their_pubkey = from_json(their_pubkey, bytes)
     coins, change = select_coins(mymoney + 2 * fees)
     anchor_output_script = anchor_script(get_pubkey(), their_pubkey)
     anchor_output_address = anchor_output_script.to_p2sh_scriptPubKey()
@@ -225,12 +218,11 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, 
             "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
             (address, mymoney, transaction.GetHash(), fees, anchor_output_script))
     CHANNEL_OPENED.send('channel', address=address)
-    return (to_json(transaction), to_json(anchor_output_script))
+    return (transaction, anchor_output_script)
 
 @REMOTE
 def update_anchor(address, new_anchor):
     """Update the anchor txid after both have signed."""
-    new_anchor = from_json(new_anchor, bytes)
     with g.dat:
         g.dat.execute("UPDATE CHANNELS SET anchor = ? WHERE address = ?", (new_anchor, address))
     return True
@@ -244,7 +236,6 @@ def recieve(address, amount):
 @REMOTE
 def close_channel(address, their_output):
     """Close a channel."""
-    their_output = from_json(their_output, CMutableTxOut)
     row = g.dat.execute(
         "SELECT amount, anchor, redeem from CHANNELS WHERE address = ?",
         (address,)).fetchone()
@@ -260,4 +251,4 @@ def close_channel(address, their_output):
     sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
     with g.dat:
         g.dat.execute("DELETE FROM CHANNELS WHERE address = ?", (address,))
-    return (to_json(transaction), to_json(sig))
+    return (transaction, sig)
