@@ -1,6 +1,5 @@
 """Integration testing."""
 
-import os.path
 import unittest
 import time
 from bitcoin.core import CMutableTransaction

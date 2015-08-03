@@ -156,7 +156,7 @@ def getbalance(url):
     """
     return g.dat.execute("SELECT amount FROM CHANNELS WHERE address = ?", (url,)).fetchone()[0]
 
-def getcommitmenttransactions(url):
+def getcommitmenttransactions(dummy_url):
     """Get the current commitment transactions in a payment channel."""
     return []
 
