@@ -10,90 +10,9 @@ api_factory -- returns a flask Blueprint or equivalent, along with a decorator
 """
 
 from functools import wraps
-from base64 import b64encode, b64decode
 from flask import current_app, Response, request, Blueprint
 from jsonrpc.backend.flask import JSONRPCAPI
-from jsonrpc.dispatcher import Dispatcher
-import bitcoin.core
-from bitcoin.core.serialize import Serializable
-
-def serialize_bytes(bytedata):
-    """Convert bytes to str."""
-    return b64encode(bytedata).decode()
-
-def deserialize_bytes(b64data):
-    """Convert str to bytes."""
-    return b64decode(b64data.encode())
-
-KNOWN_SERIALIZABLE = [
-    bitcoin.core.CMutableTransaction,
-    bitcoin.core.CTransaction,
-    bitcoin.core.CMutableTxIn,
-    bitcoin.core.CMutableTxOut,
-    ]
-SERIALIZABLE_LOOKUP = {cls.__name__:cls for cls in KNOWN_SERIALIZABLE}
-
-def to_json(message):
-    """Convert an object to JSON representation."""
-    if isinstance(message, list) or isinstance(message, tuple):
-        return [to_json(sub) for sub in message]
-    elif isinstance(message, dict):
-        assert '__class__' not in message
-        return {to_json(key):to_json(message[key]) for key in message}
-    elif isinstance(message, int) or isinstance(message, str):
-        return message
-    elif message is None:
-        return {'__class__':'None'}
-    elif isinstance(message, bytes):
-        return {'__class__':'bytes', 'value':serialize_bytes(message)}
-    elif isinstance(message, Serializable):
-        for cls in KNOWN_SERIALIZABLE:
-            if isinstance(message, cls):
-                return {'__class__':'Serializable',
-                        'subclass':cls.__name__,
-                        'value':serialize_bytes(message.serialize())}
-        raise Exception("Unknown Serializable %s" % type(message).__name__)
-    raise Exception("Unable to convert", message)
-
-def from_json(message):
-    """Retrieve an object from JSON representation."""
-    if isinstance(message, list) or isinstance(message, tuple):
-        return [from_json(sub) for sub in message]
-    elif isinstance(message, int) or isinstance(message, str):
-        return message
-    elif isinstance(message, dict):
-        if '__class__' not in message:
-            return {from_json(key):from_json(message[key]) for key in message}
-        elif message['__class__'] == 'bytes':
-            return deserialize_bytes(message['value'])
-        elif message['__class__'] == 'Serializable':
-            subclass = SERIALIZABLE_LOOKUP[message['subclass']]
-            value = subclass.deserialize(deserialize_bytes(message['value']))
-            if subclass is bitcoin.core.CMutableTransaction:
-                # vin and vout remain immutable after deserialize
-                value = bitcoin.core.CMutableTransaction.from_tx(value)
-            return value
-        elif message['__class__'] == 'None':
-            return None
-    raise Exception("Unable to convert", message)
-
-class SmartDispatcher(Dispatcher):
-    """Wrap methods to allow complex objects in JSON RPC calls."""
-    def __bool__(self): # pylint: disable=no-self-use
-        return True
-
-    def __getitem__(self, key):
-        old_value = Dispatcher.__getitem__(self, key)
-        @wraps(old_value)
-        def wrapped(*args, **kwargs):
-            """Wrap a function in JSON formatting."""
-            try:
-                return to_json(old_value(*from_json(args),
-                                         **from_json(kwargs)))
-            except Exception as exception:
-                exception.args = to_json(exception.args)
-                raise
-        return wrapped
+from jsonrpcproxy import SmartDispatcher
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):
