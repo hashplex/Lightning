@@ -42,13 +42,51 @@ API, REMOTE = api_factory('channel')
 SIGNALS = Namespace()
 CHANNEL_OPENED = SIGNALS.signal('CHANNEL_OPENED')
 
+# This should really come from an ORM
+class Channel(object):
+    """Model of a payment channel."""
+    address = None
+    amount = None
+    anchor = None
+    fees = None
+    redeem = None
+
+    @staticmethod
+    def create_table(dat):
+        """Set up the backing table."""
+        dat.execute("CREATE TABLE CHANNELS(address PRIMARY KEY, amount, anchor, fees, redeem)")
+
+    @classmethod
+    def get(cls, address):
+        """Get a Channel with the specified address."""
+        row = g.dat.execute(
+            "SELECT * from CHANNELS WHERE address = ?", (address,)).fetchone()
+        if row is None:
+            raise Exception("Unknown address", address)
+        self = cls()
+        self.address, self.amount, self.anchor, self.fees, self.redeem = row
+        return self
+
+    def put(self):
+        """Persist self."""
+        with g.dat:
+            g.dat.execute("INSERT OR REPLACE INTO CHANNELS VALUES (?, ?, ?, ?, ?)",
+                          (self.address, self.amount, self.anchor,
+                           self.fees, self.redeem))
+
+    def delete(self):
+        """Delete self."""
+        with g.dat:
+            g.dat.execute("DELETE FROM CHANNELS WHERE address = ?",
+                          (self.address,))
+
 def init(conf):
     """Set up the database."""
     conf['database_path'] = os.path.join(conf['datadir'], 'channel.dat')
     if not os.path.isfile(conf['database_path']):
         dat = sqlite3.connect(conf['database_path'])
         with dat:
-            dat.execute("CREATE TABLE CHANNELS(address, amount, anchor, fees, redeem)")
+            Channel.create_table(dat)
 
 @API.before_app_request
 def before_request():
@@ -96,15 +134,9 @@ def get_pubkey():
 
 def update_db(address, amount):
     """Update the db for a payment."""
-    row = g.dat.execute(
-        "SELECT address, amount from CHANNELS WHERE address = ?", (address,)
-    ).fetchone()
-    if row is None:
-        raise Exception("Unknown address", address)
-    address, current_amount = row
-    with g.dat:
-        g.dat.execute(
-            "UPDATE CHANNELS SET amount = ? WHERE address = ?", (current_amount + amount, address))
+    channel = Channel.get(address)
+    channel.amount += amount
+    channel.put()
 
 def create(url, mymoney, theirmoney, fees=10000):
     """Open a payment channel.
@@ -127,10 +159,13 @@ def create(url, mymoney, theirmoney, fees=10000):
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
-    with g.dat:
-        g.dat.execute(
-            "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
-            (url, mymoney, transaction.GetHash(), fees, anchor_output_script))
+    channel = Channel()
+    channel.address = url
+    channel.amount = mymoney
+    channel.anchor = transaction.GetHash()
+    channel.fees = fees
+    channel.redeem = anchor_output_script
+    channel.put()
     bob.update_anchor(g.addr, transaction.GetHash())
     CHANNEL_OPENED.send('channel', address=url)
 
@@ -151,7 +186,7 @@ def getbalance(url):
     This returns the number of satoshis you can spend in the channel
     with the node at url. This should have no side effects.
     """
-    return g.dat.execute("SELECT amount FROM CHANNELS WHERE address = ?", (url,)).fetchone()[0]
+    return Channel.get(url).amount
 
 def getcommitmenttransactions(dummy_url):
     """Get the current commitment transactions in a payment channel."""
@@ -164,15 +199,10 @@ def close(url):
     are paid to the wallet, along with any fees collected by create which
     were unnecessary."""
     bob = jsonrpcproxy.Proxy(url+'channel/')
-    row = g.dat.execute(
-        "SELECT amount, anchor, redeem from CHANNELS WHERE address = ?",
-        (url,)).fetchone()
-    if row is None:
-        raise Exception("Unknown address", url)
-    current_amount, anchor, redeem = row
-    redeem = CScript(redeem)
+    channel = Channel.get(url)
+    redeem = CScript(channel.redeem)
     output = CMutableTxOut(
-        current_amount, g.bit.getnewaddress().to_scriptPubKey())
+        channel.amount, g.bit.getnewaddress().to_scriptPubKey())
     transaction, bob_sig = bob.close_channel(g.addr, output)
     transaction = transaction
     anchor = transaction.vin[0]
@@ -188,8 +218,7 @@ def close(url):
         VerifyScript(anchor.scriptSig, redeem.to_p2sh_scriptPubKey(),
                      transaction, 0, (SCRIPT_VERIFY_P2SH,))
     g.bit.sendrawtransaction(transaction)
-    with g.dat:
-        g.dat.execute("DELETE FROM CHANNELS WHERE address = ?", (url,))
+    channel.delete()
 
 @REMOTE
 def info():
@@ -213,42 +242,39 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, 
         [payment, change, their_change])
     transaction = g.bit.signrawtransaction(transaction)
     transaction = transaction['tx']
-    with g.dat:
-        g.dat.execute(
-            "INSERT INTO CHANNELS(address, amount, anchor, fees, redeem) VALUES (?, ?, ?, ?, ?)",
-            (address, mymoney, transaction.GetHash(), fees, anchor_output_script))
+    channel = Channel()
+    channel.address = address
+    channel.amount = mymoney
+    channel.anchor = transaction.GetHash()
+    channel.fees = fees
+    channel.redeem = anchor_output_script
+    channel.put()
     CHANNEL_OPENED.send('channel', address=address)
     return (transaction, anchor_output_script)
 
 @REMOTE
 def update_anchor(address, new_anchor):
     """Update the anchor txid after both have signed."""
-    with g.dat:
-        g.dat.execute("UPDATE CHANNELS SET anchor = ? WHERE address = ?", (new_anchor, address))
-    return True
+    channel = Channel.get(address)
+    channel.anchor = new_anchor
+    channel.put()
 
 @REMOTE
 def recieve(address, amount):
     """Recieve money."""
     update_db(address, amount)
-    return True
 
 @REMOTE
 def close_channel(address, their_output):
     """Close a channel."""
-    row = g.dat.execute(
-        "SELECT amount, anchor, redeem from CHANNELS WHERE address = ?",
-        (address,)).fetchone()
-    if row is None:
-        raise Exception("Unknown address", address)
-    current_amount, anchor, redeem = row
-    redeem = CScript(redeem)
+    channel = Channel.get(address)
+    anchor = channel.anchor
+    redeem = CScript(channel.redeem)
     output = CMutableTxOut(
-        current_amount, g.bit.getnewaddress().to_scriptPubKey())
+        channel.amount, g.bit.getnewaddress().to_scriptPubKey())
     anchor = CMutableTxIn(COutPoint(anchor, 0))
     transaction = CMutableTransaction([anchor,], [output, their_output])
     sighash = SignatureHash(redeem, transaction, 0, SIGHASH_ALL)
     sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
-    with g.dat:
-        g.dat.execute("DELETE FROM CHANNELS WHERE address = ?", (address,))
+    channel.delete()
     return (transaction, sig)
