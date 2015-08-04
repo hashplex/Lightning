@@ -48,13 +48,12 @@ class Channel(object):
     address = None
     amount = None
     anchor = None
-    fees = None
     redeem = None
 
     @staticmethod
     def create_table(dat):
         """Set up the backing table."""
-        dat.execute("CREATE TABLE CHANNELS(address PRIMARY KEY, amount, anchor, fees, redeem)")
+        dat.execute("CREATE TABLE CHANNELS(address PRIMARY KEY, amount, anchor, redeem)")
 
     @classmethod
     def get(cls, address):
@@ -64,15 +63,15 @@ class Channel(object):
         if row is None:
             raise Exception("Unknown address", address)
         self = cls()
-        self.address, self.amount, self.anchor, self.fees, self.redeem = row
+        self.address, self.amount, self.anchor, self.redeem = row
         return self
 
     def put(self):
         """Persist self."""
         with g.dat:
-            g.dat.execute("INSERT OR REPLACE INTO CHANNELS VALUES (?, ?, ?, ?, ?)",
+            g.dat.execute("INSERT OR REPLACE INTO CHANNELS VALUES (?, ?, ?, ?)",
                           (self.address, self.amount, self.anchor,
-                           self.fees, self.redeem))
+                           self.redeem))
 
     def delete(self):
         """Delete self."""
@@ -163,7 +162,6 @@ def create(url, mymoney, theirmoney, fees=10000):
     channel.address = url
     channel.amount = mymoney
     channel.anchor = transaction.GetHash()
-    channel.fees = fees
     channel.redeem = anchor_output_script
     channel.put()
     bob.update_anchor(g.addr, transaction.GetHash())
@@ -246,7 +244,6 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, 
     channel.address = address
     channel.amount = mymoney
     channel.anchor = transaction.GetHash()
-    channel.fees = fees
     channel.redeem = anchor_output_script
     channel.put()
     CHANNEL_OPENED.send('channel', address=address)
