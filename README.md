@@ -20,6 +20,7 @@ Overview
 
 This is an implementation of a Lightning node. Its goal is to foster experimentation with the Lightning protocol by simultaneously providing a full stack implementation that can stand alone and providing sufficient modularity that the server, the micropayment channel protocol, the routing protocol, and the user interface can all be developed independently of each other.
 
+`demo.py`, described under Usage below, is a good place to play around.
 `test.py` is where I recommend you start reading, specifically TestChannel.test_basic and TestLightning.test_payment.
 
 Directory:
@@ -36,8 +37,8 @@ Grab a bitcoind 10.x executable and put it in the directory.
 This project uses Python 3.
 Set up a virtualenv and install from `requirements.txt`.
 Tests can be run as `python -m unittest`.
-To set up a regtest network, run `python create_regnet.py`.
-Read `test.py` for examples of usage
+To set up a regtest network, run `python create_regnet.py` OR
+Run `python -i demo.py` to setup a regtest network and get proxies to all three nodes (Read demo.py for usage)
 
 Design
 ------
