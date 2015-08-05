@@ -59,7 +59,7 @@ class AnchorScriptSig(object):
             self.my_sig, self.their_sig = sig2, sig1
         else:
             raise Exception("Unknown index", my_index)
-        self.redeem = redeem
+        self.redeem = CScript(redeem)
 
     @classmethod
     def from_script(cls, script):
@@ -132,15 +132,14 @@ class Channel(object):
     @property
     def redeem(self):
         """Get the redeem script."""
-        return AnchorScriptSig.from_script(
-            self.commitment.vin[0].scriptSig).redeem
+        return self.get_script_sig().redeem
 
     @redeem.setter
     def redeem(self, value):
         """Set the redeem script."""
-        script = AnchorScriptSig.from_script(self.commitment.vin[0].scriptSig)
+        script = self.get_script_sig()
         script.redeem = value
-        self.commitment.vin[0].scriptSig = script.to_script()
+        self.set_script_sig(script)
 
     @property
     def anchor(self):
@@ -151,6 +150,35 @@ class Channel(object):
     def anchor(self, value):
         """Set the anchor txid."""
         self.commitment.vin[0].prevout.hash = value
+
+    def get_script_sig(self):
+        """Get the scriptSig for the anchor input."""
+        return AnchorScriptSig.from_script(self.commitment.vin[0].scriptSig)
+
+    def set_script_sig(self, value):
+        """Set the scriptSig for the anchor input."""
+        self.commitment.vin[0].scriptSig = value.to_script()
+
+    @property
+    def their_sig(self):
+        """Get their signature."""
+        return self.get_script_sig().their_sig
+
+    @their_sig.setter
+    def their_sig(self, value):
+        """Set their signature."""
+        script = self.get_script_sig()
+        script.their_sig = value
+        self.set_script_sig(script)
+
+    @property
+    def sig_for_them(self):
+        """Generate a signature for the mirror commitment transaction."""
+        transaction = CMutableTransaction.from_tx(self.commitment)
+        transaction.vout.reverse()
+        sighash = SignatureHash(self.redeem, transaction, 0, SIGHASH_ALL)
+        sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
+        return sig
 
 def init(conf):
     """Set up the database."""
@@ -237,7 +265,7 @@ def create(url, mymoney, theirmoney, fees=10000):
     channel.anchor = transaction.GetHash()
     channel.redeem = anchor_output_script
     channel.put()
-    bob.update_anchor(g.addr, transaction.GetHash())
+    channel.their_sig = bob.update_anchor(g.addr, transaction.GetHash(), channel.sig_for_them)
     CHANNEL_OPENED.send('channel', address=url)
 
 def send(url, amount):
@@ -323,11 +351,13 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, 
     return (transaction, anchor_output_script)
 
 @REMOTE
-def update_anchor(address, new_anchor):
+def update_anchor(address, new_anchor, their_sig):
     """Update the anchor txid after both have signed."""
     channel = Channel.get(address)
     channel.anchor = new_anchor
+    channel.their_sig = their_sig
     channel.put()
+    return channel.sig_for_them
 
 @REMOTE
 def recieve(address, amount):
