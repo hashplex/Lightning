@@ -8,6 +8,16 @@ send(url, amount)
   necessarily a direct peer.
 
 Error conditions have not been defined.
+
+Database:
+PEERS contains information nodes we have channels open with
+address: their url
+fees: how much we require as fees for relaying across this channel
+
+ROUTES is the routing table. It has one row for every other lightning node
+address: their url
+cost: total fees to route payment to that node
+nexthop: where should payment go next on the path to that node
 """
 
 import os.path
@@ -53,6 +63,11 @@ def on_open(dummy_sender, address, **dummy_args):
     with g.ldat:
         g.ldat.execute("INSERT INTO PEERS VALUES (?, ?)", (address, fees))
     update(address, address, 0)
+    rows = g.ldat.execute("SELECT * from ROUTES").fetchall()
+    with g.ldat:
+        g.ldat.execute("DELETE FROM ROUTES")
+    for address, cost, next_hop in rows:
+        update(next_hop, address, cost)
 
 @REMOTE
 def update(next_hop, address, cost):
