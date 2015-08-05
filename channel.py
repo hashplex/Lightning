@@ -26,10 +26,7 @@ Error conditions have not yet been defined.
 Database:
 The schema is currently one row for each channel in table CHANNELS.
 address: url for the counterpary
-amount: how much money in the channel is yours
-anchor: txid of the anchor transaction
-fees: the fee amount for blockchain transactions
-redeem: the redeem script for the anchor transaction
+commitment: your commitment transaction
 """
 
 import os.path
