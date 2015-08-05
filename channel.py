@@ -42,18 +42,52 @@ API, REMOTE = api_factory('channel')
 SIGNALS = Namespace()
 CHANNEL_OPENED = SIGNALS.signal('CHANNEL_OPENED')
 
+class AnchorScriptSig(object):
+    """Class representing the scriptSig satisfying the anchor output"""
+    def __init__(self, my_index, sig1, sig2, redeem):
+        if my_index == b'':
+            my_index = 0
+        self.my_index = my_index
+        if my_index == 0:
+            self.my_sig, self.their_sig = sig1, sig2
+        elif my_index == 1:
+            self.my_sig, self.their_sig = sig2, sig1
+        else:
+            raise Exception("Unknown index", my_index)
+        self.redeem = redeem
+
+    @classmethod
+    def from_script(cls, script):
+        """Construct an AnchorScriptSig from a CScript."""
+        script = list(script)
+        assert len(script) == 4
+        return cls(*script)
+
+    def to_script(self):
+        """Construct a CScript from an AnchorScriptSig."""
+        if self.my_index == 0:
+            sig1, sig2 = self.my_sig, self.their_sig
+        elif self.my_index == 1:
+            sig1, sig2 = self.their_sig, self.my_sig
+        else:
+            raise Exception("Unknown index", self.my_index)
+        return CScript([self.my_index, sig1, sig2, self.redeem])
+
 # This should really come from an ORM
 class Channel(object):
     """Model of a payment channel."""
     address = None
-    amount = None
-    anchor = None
-    redeem = None
+    commitment = None
+    def __init__(self):
+        script_sig = AnchorScriptSig(0, b'', b'', b'').to_script()
+        self.commitment = CMutableTransaction(
+            [CMutableTxIn(scriptSig=script_sig)],
+            [CMutableTxOut(), CMutableTxOut()])
 
     @staticmethod
     def create_table(dat):
         """Set up the backing table."""
-        dat.execute("CREATE TABLE CHANNELS(address PRIMARY KEY, amount, anchor, redeem)")
+        dat.execute("CREATE TABLE CHANNELS(address PRIMARY KEY, commitment)")
 
     @classmethod
     def get(cls, address):
@@ -63,21 +97,55 @@ class Channel(object):
         if row is None:
             raise Exception("Unknown address", address)
         self = cls()
-        self.address, self.amount, self.anchor, self.redeem = row
+        self.address, self.commitment = row
+        self.commitment = CMutableTransaction.deserialize(self.commitment)
+        self.commitment = CMutableTransaction.from_tx(self.commitment)
         return self
 
     def put(self):
         """Persist self."""
         with g.dat:
-            g.dat.execute("INSERT OR REPLACE INTO CHANNELS VALUES (?, ?, ?, ?)",
-                          (self.address, self.amount, self.anchor,
-                           self.redeem))
+            g.dat.execute("INSERT OR REPLACE INTO CHANNELS VALUES (?, ?)",
+                          (self.address, self.commitment.serialize()))
 
     def delete(self):
         """Delete self."""
         with g.dat:
             g.dat.execute("DELETE FROM CHANNELS WHERE address = ?",
                           (self.address,))
+
+    @property
+    def amount(self):
+        """Get the amount of money you have in the channel."""
+        return self.commitment.vout[0].nValue
+
+    @amount.setter
+    def amount(self, value):
+        """Set the amount of money you have in the channel."""
+        self.commitment.vout[0].nValue = value
+
+    @property
+    def redeem(self):
+        """Get the redeem script."""
+        return AnchorScriptSig.from_script(
+            self.commitment.vin[0].scriptSig).redeem
+
+    @redeem.setter
+    def redeem(self, value):
+        """Set the redeem script."""
+        script = AnchorScriptSig.from_script(self.commitment.vin[0].scriptSig)
+        script.redeem = value
+        self.commitment.vin[0].scriptSig = script.to_script()
+
+    @property
+    def anchor(self):
+        """Get the anchor txid."""
+        return self.commitment.vin[0].prevout.hash
+
+    @anchor.setter
+    def anchor(self, value):
+        """Set the anchor txid."""
+        self.commitment.vin[0].prevout.hash = value
 
 def init(conf):
     """Set up the database."""
