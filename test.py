@@ -191,6 +191,17 @@ class TestLightning(unittest.TestCase):
         self.assertEqual(self.carol.lit.getbalance(self.alice.lurl), 55000000 + fee)
         self.assertEqual(self.bob.lit.getbalance(self.carol.lurl), 55000000)
         self.assertEqual(self.carol.lit.getbalance(self.bob.lurl), 45000000)
+        # Send money the other direction
+        self.bob.lit.send(self.alice.lurl, 10000000)
+        # Annother fee will be deducted
+        fee2 = 45000000 - self.bob.lit.getbalance(self.carol.lurl)
+        self.assertGreaterEqual(fee2, 0)
+        # (Balance) Alice-Carol: Alice: 0.55 - fee  BTC, Carol 0.45 + fee  BTC
+        #           Carol-Bob  : Carol: 0.55 + fee2 BTC, Bob   0.45 - fee2  BTC
+        # (Total) Alice: 0.55 - fee BTC, Carol: 1.00 + fee + fee2 BTC, Bob: 0.45 - fee2 BTC
+        self.assertEqual(self.carol.lit.getbalance(self.alice.lurl), 45000000 + fee)
+        self.assertEqual(self.alice.lit.getbalance(self.carol.lurl), 55000000 - fee)
+        self.assertEqual(self.carol.lit.getbalance(self.bob.lurl), 45000000 + fee2)
 
 if __name__ == '__main__':
     unittest.main()
