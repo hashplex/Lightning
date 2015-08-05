@@ -63,6 +63,11 @@ def on_open(dummy_sender, address, **dummy_args):
     with g.ldat:
         g.ldat.execute("INSERT INTO PEERS VALUES (?, ?)", (address, fees))
     update(address, address, 0)
+    rows = g.ldat.execute("SELECT * from ROUTES").fetchall()
+    with g.ldat:
+        g.ldat.execute("DELETE FROM ROUTES")
+    for address, cost, next_hop in rows:
+        update(next_hop, address, cost)
 
 @REMOTE
 def update(next_hop, address, cost):
