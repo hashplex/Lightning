@@ -232,11 +232,13 @@ def get_pubkey():
     """Get a new pubkey."""
     return g.seckey.pub
 
-def update_db(address, amount):
+def update_db(address, amount, sig):
     """Update the db for a payment."""
     channel = Channel.get(address)
     channel.amount += amount
+    channel.their_sig = sig
     channel.put()
+    return channel.sig_for_them
 
 def create(url, mymoney, theirmoney, fees=10000):
     """Open a payment channel.
@@ -275,9 +277,9 @@ def send(url, amount):
     amount more satoshis than before. No fees should be collected by this
     method.
     """
-    update_db(url, -amount)
     bob = jsonrpcproxy.Proxy(url+'channel/')
-    bob.recieve(g.addr, amount)
+    sig = update_db(url, -amount, bob.propose_update(g.addr, amount))
+    bob.recieve(g.addr, amount, sig)
 
 def getbalance(url):
     """Get the balance of funds in a payment channel.
@@ -360,9 +362,18 @@ def update_anchor(address, new_anchor, their_sig):
     return channel.sig_for_them
 
 @REMOTE
-def recieve(address, amount):
+def propose_update(address, amount):
+    """Sign commitment transactions."""
+    channel = Channel.get(address)
+    assert amount > 0
+    channel.amount += amount
+    # don't persist yet
+    return channel.sig_for_them
+
+@REMOTE
+def recieve(address, amount, sig):
     """Recieve money."""
-    update_db(address, amount)
+    update_db(address, amount, sig)
 
 @REMOTE
 def close_channel(address, their_output):
