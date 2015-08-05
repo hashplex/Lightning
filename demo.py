@@ -14,15 +14,18 @@ Check balances:
 Read test.py for more example usage.
 """
 
-import test
-test_case = test.TestLightning()
-test_case.setUp()
+# pylint: disable=invalid-name
 
-alice, bob, carol = test_case.alice, test_case.bob, test_case.carol
+import test
+TEST_CASE = test.TestLightning()
+TEST_CASE.setUp()
+
+alice, bob, carol = TEST_CASE.alice, TEST_CASE.bob, TEST_CASE.carol
 
 def balances():
     """Return the total balances of Alice, Bob, and Carol."""
     return (alice.bit.getbalance() + alice.lit.getbalance(carol.lurl),
             bob.bit.getbalance() + bob.lit.getbalance(carol.lurl),
-            carol.bit.getbalance() + carol.lit.getbalance(alice.lurl) + carol.lit.getbalance(bob.lurl),
-            )
+            carol.bit.getbalance() + carol.lit.getbalance(alice.lurl) + \
+                                     carol.lit.getbalance(bob.lurl),
+           )
