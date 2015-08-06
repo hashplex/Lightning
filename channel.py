@@ -33,12 +33,12 @@ import os.path
 import sqlite3
 from flask import g
 from blinker import Namespace
-from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
+from bitcoin.core import CMutableOutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.scripteval import VerifyScriptError
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
-from bitcoin.core.script import OP_CHECKMULTISIG
+from bitcoin.core.script import OP_CHECKMULTISIG, OP_PUBKEY
 import jsonrpcproxy
 from serverutil import api_factory, requires_auth
 
@@ -49,16 +49,13 @@ CHANNEL_OPENED = SIGNALS.signal('CHANNEL_OPENED')
 
 class AnchorScriptSig(object):
     """Class representing the scriptSig satisfying the anchor output"""
-    def __init__(self, my_index, sig1, sig2, redeem):
+    def __init__(self, my_index, sig=b'', redeem=b''):
         if my_index == b'':
             my_index = 0
-        self.my_index = my_index
-        if my_index == 0:
-            self.my_sig, self.their_sig = sig1, sig2
-        elif my_index == 1:
-            self.my_sig, self.their_sig = sig2, sig1
-        else:
+        if my_index not in [0, 1]:
             raise Exception("Unknown index", my_index)
+        self.my_index = my_index
+        self.sig = sig
         self.redeem = CScript(redeem)
 
     @classmethod
@@ -66,27 +63,33 @@ class AnchorScriptSig(object):
         """Construct an AnchorScriptSig from a CScript."""
         script = list(script)
         assert len(script) == 4
-        return cls(*script)
+        if script[1] == OP_PUBKEY:
+            return cls(0, script[2], script[3])
+        elif script[2] == OP_PUBKEY:
+            return cls(1, script[1], script[3])
+        else:
+            raise Exception("Could not find OP_PUBKEY")
 
-    def to_script(self):
+    def to_script(self, sig=OP_PUBKEY):
         """Construct a CScript from an AnchorScriptSig."""
         if self.my_index == 0:
-            sig1, sig2 = self.my_sig, self.their_sig
+            sig1, sig2 = sig, self.sig
         elif self.my_index == 1:
-            sig1, sig2 = self.their_sig, self.my_sig
+            sig1, sig2 = self.sig, sig
         else:
             raise Exception("Unknown index", self.my_index)
-        return CScript([self.my_index, sig1, sig2, self.redeem])
+        return CScript([0, sig1, sig2, self.redeem])
 
 # This should really come from an ORM
 class Channel(object):
     """Model of a payment channel."""
     address = None
     commitment = None
-    def __init__(self):
-        script_sig = AnchorScriptSig(0, b'', b'', b'').to_script()
+    def __init__(self, my_index=0):
+        script_sig = AnchorScriptSig(my_index).to_script()
         self.commitment = CMutableTransaction(
-            [CMutableTxIn(scriptSig=script_sig)],
+            [CMutableTxIn(prevout=CMutableOutPoint(n=0),
+                          scriptSig=script_sig)],
             [CMutableTxOut(), CMutableTxOut()])
 
     @staticmethod
@@ -130,6 +133,16 @@ class Channel(object):
         self.commitment.vout[0].nValue = value
 
     @property
+    def their_amount(self):
+        """Get the amount of money they have in the channel."""
+        return self.commitment.vout[1].nValue
+
+    @their_amount.setter
+    def their_amount(self, value):
+        """Set the amount of money they have in the channel."""
+        self.commitment.vout[1].nValue = value
+
+    @property
     def redeem(self):
         """Get the redeem script."""
         return self.get_script_sig().redeem
@@ -162,13 +175,13 @@ class Channel(object):
     @property
     def their_sig(self):
         """Get their signature."""
-        return self.get_script_sig().their_sig
+        return self.get_script_sig().sig
 
     @their_sig.setter
     def their_sig(self, value):
         """Set their signature."""
         script = self.get_script_sig()
-        script.their_sig = value
+        script.sig = value
         self.set_script_sig(script)
 
     @property
@@ -179,6 +192,19 @@ class Channel(object):
         sighash = SignatureHash(self.redeem, transaction, 0, SIGHASH_ALL)
         sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
         return sig
+
+    @property
+    def signed_commitment(self):
+        """Return the fully signed commitment transaction."""
+        script = self.get_script_sig()
+        transaction = CMutableTransaction.from_tx(self.commitment)
+        sighash = SignatureHash(self.redeem, transaction, 0, SIGHASH_ALL)
+        sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
+        script = script.to_script(sig)
+        transaction.vin[0].scriptSig = script
+        VerifyScript(script, self.redeem.to_p2sh_scriptPubKey(),
+                     transaction, 0, (SCRIPT_VERIFY_P2SH,))
+        return transaction
 
 def init(conf):
     """Set up the database."""
@@ -236,6 +262,7 @@ def update_db(address, amount, sig):
     """Update the db for a payment."""
     channel = Channel.get(address)
     channel.amount += amount
+    channel.their_amount -= amount
     channel.their_sig = sig
     channel.put()
     return channel.sig_for_them
@@ -261,9 +288,10 @@ def create(url, mymoney, theirmoney, fees=10000):
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
-    channel = Channel()
+    channel = Channel(1)
     channel.address = url
     channel.amount = mymoney
+    channel.their_amount = theirmoney
     channel.anchor = transaction.GetHash()
     channel.redeem = anchor_output_script
     channel.put()
@@ -289,9 +317,11 @@ def getbalance(url):
     """
     return Channel.get(url).amount
 
-def getcommitmenttransactions(dummy_url):
+def getcommitmenttransactions(url):
     """Get the current commitment transactions in a payment channel."""
-    return []
+    channel = Channel.get(url)
+    commitment = channel.signed_commitment
+    return [commitment,]
 
 def close(url):
     """Close a channel.
@@ -343,9 +373,10 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, 
         [payment, change, their_change])
     transaction = g.bit.signrawtransaction(transaction)
     transaction = transaction['tx']
-    channel = Channel()
+    channel = Channel(0)
     channel.address = address
     channel.amount = mymoney
+    channel.their_amount = theirmoney
     channel.anchor = transaction.GetHash()
     channel.redeem = anchor_output_script
     channel.put()
@@ -383,7 +414,7 @@ def close_channel(address, their_output):
     redeem = CScript(channel.redeem)
     output = CMutableTxOut(
         channel.amount, g.bit.getnewaddress().to_scriptPubKey())
-    anchor = CMutableTxIn(COutPoint(anchor, 0))
+    anchor = CMutableTxIn(CMutableOutPoint(anchor, 0))
     transaction = CMutableTransaction([anchor,], [output, their_output])
     sighash = SignatureHash(redeem, transaction, 0, SIGHASH_ALL)
     sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
