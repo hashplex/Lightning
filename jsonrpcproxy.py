@@ -37,6 +37,47 @@ KNOWN_SERIALIZABLE = [
 ]
 SERIALIZABLE_LOOKUP = {cls.__name__:cls for cls in KNOWN_SERIALIZABLE}
 
+def subclass_hook(encode, decode, allowed):
+    """Generate encode/decode functions for one interface."""
+    lookup = {cls.__name__:cls for cls in allowed}
+    def encode_subclass(message):
+        """Convert message to JSON."""
+        for cls in allowed:
+            if isinstance(message, cls):
+                return {'subclass':cls.__name__,
+                        'value':encode(message)}
+        raise Exception("Unknown message type", type(message).__name__)
+    def decode_subclass(message):
+        """Recover message from JSON."""
+        cls = lookup[message['subclass']]
+        return decode(cls, message['value'])
+    return encode_subclass, decode_subclass
+
+HOOKS = [
+    (bitcoin.base58.CBase58Data, subclass_hook(
+        str,
+        lambda cls, message: cls(message),
+        [
+            bitcoin.wallet.CBitcoinAddress,
+            bitcoin.base58.CBase58Data,
+        ])),
+    (bytes, subclass_hook(
+        serialize_bytes,
+        lambda cls, message: cls(deserialize_bytes(message)),
+        [
+            bytes,
+        ])),
+    (Serializable, subclass_hook(
+        lambda message: serialize_bytes(message.serialize()),
+        lambda cls, message: cls.deserialize(deserialize_bytes(message)),
+        [
+            bitcoin.core.CMutableTransaction,
+            bitcoin.core.CTransaction,
+            bitcoin.core.CMutableTxIn,
+            bitcoin.core.CMutableTxOut,
+        ])),
+]
+
 def to_json(message):
     """Convert an object to JSON representation."""
     if isinstance(message, list) or isinstance(message, tuple):
@@ -48,27 +89,14 @@ def to_json(message):
         return message
     elif message is None:
         return {'__class__':'None'}
-    elif isinstance(message, bitcoin.base58.CBase58Data):
-        for cls in KNOWN_BASE58:
+    else:
+        for cls, codes in HOOKS:
             if isinstance(message, cls):
-                return {'__class__':'BASE58',
-                        'subclass':cls.__name__,
-                        'value':str(message)}
-    elif isinstance(message, bytes):
-        for cls in KNOWN_BYTES:
-            if isinstance(message, cls):
-                return {'__class__':'bytes',
-                        'subclass':cls.__name__,
-                        'value':serialize_bytes(message)}
-        raise Exception("Unknown bytes %s" % type(message).__name__)
-    elif isinstance(message, Serializable):
-        for cls in KNOWN_SERIALIZABLE:
-            if isinstance(message, cls):
-                return {'__class__':'Serializable',
-                        'subclass':cls.__name__,
-                        'value':serialize_bytes(message.serialize())}
-        raise Exception("Unknown Serializable %s" % type(message).__name__)
-    raise Exception("Unable to convert", message)
+                out = codes[0](message)
+                assert '__class__' not in out
+                out['__class__'] = cls.__name__
+                return out
+        raise Exception("Unable to convert", message)
 
 def from_json(message):
     """Retrieve an object from JSON representation."""
@@ -79,21 +107,12 @@ def from_json(message):
     elif isinstance(message, dict):
         if '__class__' not in message:
             return {from_json(key):from_json(message[key]) for key in message}
-        elif message['__class__'] == 'BASE58':
-            subclass = BASE58_LOOKUP[message['subclass']]
-            return subclass(message['value'])
-        elif message['__class__'] == 'bytes':
-            subclass = BYTES_LOOKUP[message['subclass']]
-            return subclass(deserialize_bytes(message['value']))
-        elif message['__class__'] == 'Serializable':
-            subclass = SERIALIZABLE_LOOKUP[message['subclass']]
-            value = subclass.deserialize(deserialize_bytes(message['value']))
-            if subclass is bitcoin.core.CMutableTransaction:
-                # vin and vout remain immutable after deserialize
-                value = bitcoin.core.CMutableTransaction.from_tx(value)
-            return value
         elif message['__class__'] == 'None':
             return None
+        else:
+            for cls, codes in HOOKS:
+                if message['__class__'] == cls.__name__:
+                    return codes[1](message)
     raise Exception("Unable to convert", message)
 
 class SmartDispatcher(Dispatcher):
