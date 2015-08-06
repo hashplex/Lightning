@@ -109,9 +109,32 @@ class TestChannel(unittest.TestCase):
         self.propagate()
         self.assertGreaterEqual(self.alice.bit.getbalance(), 85000000 - afee)
 
+    def test_unilateral_close(self):
+        """Test unilateral close."""
+        self.alice.lit.create(self.bob.lurl, 50000000, 25000000)
+        self.propagate()
+        afee = 50000000 - self.alice.bit.getbalance()
+        bfee = 75000000 - self.bob.bit.getbalance()
+        self.assertGreaterEqual(afee, 0)
+        self.assertGreaterEqual(bfee, 0)
+        self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 50000000)
+        self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 25000000)
+        self.bob.lit.send(self.alice.lurl, 5000000)
+        self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 55000000)
+        self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 20000000)
+        stop(self.bob.lpid)
+        commitment = self.alice.lit.getcommitmenttransactions(self.bob.lurl)
+        for transaction in commitment:
+            self.alice.bit.sendrawtransaction(transaction)
+            self.propagate()
+        time.sleep(1)
+        self.propagate()
+        self.assertGreaterEqual(self.bob.bit.getbalance(), 95000000 - bfee)
+        self.assertGreaterEqual(self.alice.bit.getbalance(), 105000000 - afee)
+
     @unittest.expectedFailure
-    def test_malicious(self):
-        """Test recovery from a malicious counterparty."""
+    def test_revoked(self):
+        """Test a revoked commitment transaction being published."""
         self.alice.lit.create(self.bob.lurl, 50000000, 25000000)
         self.propagate()
         afee = 50000000 - self.alice.bit.getbalance()
