@@ -8,6 +8,10 @@ https://lightning.network/
 
 Lightning is a trustless clearinghouse network based on micropayment channels and backed by Bitcoin. It makes fast, cheap microtransactions possible.
 
+http://ozlabs.org/~rusty/ln-deploy-draft-01.pdf
+
+Rusty Russell's paper containing improvements to the Lightning protocol.
+
 This is an experimental implementation of a Lightning node.
 
 License
