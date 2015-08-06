@@ -9,6 +9,8 @@ import requests
 from jsonrpc.dispatcher import Dispatcher
 import bitcoin.core
 from bitcoin.core.serialize import Serializable
+import bitcoin.wallet
+from bitcoin.wallet import CBitcoinAddress
 
 def serialize_bytes(bytedata):
     """Convert bytes to str."""
@@ -18,6 +20,10 @@ def deserialize_bytes(b64data):
     """Convert str to bytes."""
     return b64decode(b64data.encode())
 
+KNOWN_BYTES = [
+    bytes,
+    ]
+BYTES_LOOKUP = {cls.__name__:cls for cls in KNOWN_BYTES}
 KNOWN_SERIALIZABLE = [
     bitcoin.core.CMutableTransaction,
     bitcoin.core.CTransaction,
@@ -37,8 +43,17 @@ def to_json(message):
         return message
     elif message is None:
         return {'__class__':'None'}
+    elif isinstance(message, CBitcoinAddress):
+        return {'__class__':'CBitcoinAddress',
+                'value':serialize_bytes(message.to_bytes()),
+                'nVersion':message.nVersion}
     elif isinstance(message, bytes):
-        return {'__class__':'bytes', 'value':serialize_bytes(message)}
+        for cls in KNOWN_BYTES:
+            if isinstance(message, cls):
+                return {'__class__':'bytes',
+                        'subclass':cls.__name__,
+                        'value':serialize_bytes(message)}
+        raise Exception("Unknown bytes %s" % type(message).__name__)
     elif isinstance(message, Serializable):
         for cls in KNOWN_SERIALIZABLE:
             if isinstance(message, cls):
@@ -57,8 +72,13 @@ def from_json(message):
     elif isinstance(message, dict):
         if '__class__' not in message:
             return {from_json(key):from_json(message[key]) for key in message}
+        elif message['__class__'] == 'CBitcoinAddress':
+            return CBitcoinAddress.from_bytes(
+                deserialize_bytes(message['value']),
+                message['nVersion'])
         elif message['__class__'] == 'bytes':
-            return deserialize_bytes(message['value'])
+            subclass = BYTES_LOOKUP[message['subclass']]
+            return subclass(deserialize_bytes(message['value']))
         elif message['__class__'] == 'Serializable':
             subclass = SERIALIZABLE_LOOKUP[message['subclass']]
             value = subclass.deserialize(deserialize_bytes(message['value']))

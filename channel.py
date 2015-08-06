@@ -39,6 +39,7 @@ from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.scripteval import VerifyScriptError
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_CHECKMULTISIG, OP_PUBKEY
+from bitcoin.wallet import CBitcoinAddress
 import jsonrpcproxy
 from serverutil import api_factory, requires_auth
 
@@ -49,7 +50,7 @@ CHANNEL_OPENED = SIGNALS.signal('CHANNEL_OPENED')
 
 class AnchorScriptSig(object):
     """Class representing the scriptSig satisfying the anchor output"""
-    def __init__(self, my_index, sig=b'', redeem=b''):
+    def __init__(self, my_index=0, sig=b'', redeem=b''):
         if my_index == b'':
             my_index = 0
         if my_index not in [0, 1]:
@@ -85,8 +86,8 @@ class Channel(object):
     """Model of a payment channel."""
     address = None
     commitment = None
-    def __init__(self, my_index=0):
-        script_sig = AnchorScriptSig(my_index).to_script()
+    def __init__(self):
+        script_sig = AnchorScriptSig().to_script()
         self.commitment = CMutableTransaction(
             [CMutableTxIn(prevout=CMutableOutPoint(n=0),
                           scriptSig=script_sig)],
@@ -123,6 +124,28 @@ class Channel(object):
                           (self.address,))
 
     @property
+    def my_out_addr(self):
+        """Get my settlement address."""
+        return CBitcoinAddress.from_scriptPubKey(
+            self.commitment.vout[0].scriptPubKey)
+
+    @my_out_addr.setter
+    def my_out_addr(self, value):
+        """Set my settlement address"""
+        self.commitment.vout[0].scriptPubKey = value.to_scriptPubKey()
+
+    @property
+    def their_out_addr(self):
+        """Get their settlement address."""
+        return CBitcoinAddress.from_scriptPubKey(
+            self.commitment.vout[1].scriptPubKey)
+
+    @their_out_addr.setter
+    def their_out_addr(self, value):
+        """Set their settlement address."""
+        self.commitment.vout[1].scriptPubKey = value.to_scriptPubKey()
+
+    @property
     def amount(self):
         """Get the amount of money you have in the channel."""
         return self.commitment.vout[0].nValue
@@ -152,6 +175,18 @@ class Channel(object):
         """Set the redeem script."""
         script = self.get_script_sig()
         script.redeem = value
+        self.set_script_sig(script)
+
+    @property
+    def my_index(self):
+        """Get 0 if my signature goes first, else 1."""
+        return self.get_script_sig().my_index
+
+    @my_index.setter
+    def my_index(self, value):
+        """Set whether my signature goes first (0) or second (1)."""
+        script = self.get_script_sig()
+        script.my_index = value
         self.set_script_sig(script)
 
     @property
@@ -278,17 +313,21 @@ def create(url, mymoney, theirmoney, fees=10000):
     bob = jsonrpcproxy.Proxy(url+'channel/')
     coins, change = select_coins(mymoney + 2 * fees)
     pubkey = get_pubkey()
-    transaction, redeem = bob.open_channel(
+    my_out_addr = g.bit.getnewaddress()
+    transaction, redeem, their_out_addr = bob.open_channel(
         g.addr, theirmoney, mymoney, fees,
         coins, change,
-        pubkey)
+        pubkey, my_out_addr)
     transaction = transaction
     anchor_output_script = redeem
     transaction = g.bit.signrawtransaction(transaction)
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
-    channel = Channel(1)
+    channel = Channel()
+    channel.my_index = 1
+    channel.my_out_addr = my_out_addr
+    channel.their_out_addr = their_out_addr
     channel.address = url
     channel.amount = mymoney
     channel.their_amount = theirmoney
@@ -362,7 +401,7 @@ def get_address():
     return str(g.bit.getnewaddress())
 
 @REMOTE
-def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, their_pubkey): # pylint: disable=too-many-arguments
+def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, their_pubkey, their_out_addr): # pylint: disable=too-many-arguments
     """Open a payment channel."""
     coins, change = select_coins(mymoney + 2 * fees)
     anchor_output_script = anchor_script(get_pubkey(), their_pubkey)
@@ -373,7 +412,10 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, 
         [payment, change, their_change])
     transaction = g.bit.signrawtransaction(transaction)
     transaction = transaction['tx']
-    channel = Channel(0)
+    channel = Channel()
+    channel.my_index = 0
+    channel.my_out_addr = g.bit.getnewaddress()
+    channel.their_out_addr = their_out_addr
     channel.address = address
     channel.amount = mymoney
     channel.their_amount = theirmoney
@@ -381,7 +423,7 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, 
     channel.redeem = anchor_output_script
     channel.put()
     CHANNEL_OPENED.send('channel', address=address)
-    return (transaction, anchor_output_script)
+    return (transaction, anchor_output_script, channel.my_out_addr)
 
 @REMOTE
 def update_anchor(address, new_anchor, their_sig):

@@ -109,7 +109,6 @@ class TestChannel(unittest.TestCase):
         self.propagate()
         self.assertGreaterEqual(self.alice.bit.getbalance(), 85000000 - afee)
 
-    @unittest.expectedFailure
     def test_unilateral_close(self):
         """Test unilateral close."""
         self.alice.lit.create(self.bob.lurl, 50000000, 25000000)
