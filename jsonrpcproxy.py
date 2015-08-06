@@ -10,7 +10,7 @@ from jsonrpc.dispatcher import Dispatcher
 import bitcoin.core
 from bitcoin.core.serialize import Serializable
 import bitcoin.wallet
-from bitcoin.wallet import CBitcoinAddress
+import bitcoin.base58
 
 def serialize_bytes(bytedata):
     """Convert bytes to str."""
@@ -20,16 +20,21 @@ def deserialize_bytes(b64data):
     """Convert str to bytes."""
     return b64decode(b64data.encode())
 
+KNOWN_BASE58 = [
+    bitcoin.wallet.CBitcoinAddress,
+    bitcoin.base58.CBase58Data,
+]
+BASE58_LOOKUP = {cls.__name__:cls for cls in KNOWN_BASE58}
 KNOWN_BYTES = [
     bytes,
-    ]
+]
 BYTES_LOOKUP = {cls.__name__:cls for cls in KNOWN_BYTES}
 KNOWN_SERIALIZABLE = [
     bitcoin.core.CMutableTransaction,
     bitcoin.core.CTransaction,
     bitcoin.core.CMutableTxIn,
     bitcoin.core.CMutableTxOut,
-    ]
+]
 SERIALIZABLE_LOOKUP = {cls.__name__:cls for cls in KNOWN_SERIALIZABLE}
 
 def to_json(message):
@@ -43,10 +48,12 @@ def to_json(message):
         return message
     elif message is None:
         return {'__class__':'None'}
-    elif isinstance(message, CBitcoinAddress):
-        return {'__class__':'CBitcoinAddress',
-                'value':serialize_bytes(message.to_bytes()),
-                'nVersion':message.nVersion}
+    elif isinstance(message, bitcoin.base58.CBase58Data):
+        for cls in KNOWN_BASE58:
+            if isinstance(message, cls):
+                return {'__class__':'BASE58',
+                        'subclass':cls.__name__,
+                        'value':str(message)}
     elif isinstance(message, bytes):
         for cls in KNOWN_BYTES:
             if isinstance(message, cls):
@@ -72,10 +79,9 @@ def from_json(message):
     elif isinstance(message, dict):
         if '__class__' not in message:
             return {from_json(key):from_json(message[key]) for key in message}
-        elif message['__class__'] == 'CBitcoinAddress':
-            return CBitcoinAddress.from_bytes(
-                deserialize_bytes(message['value']),
-                message['nVersion'])
+        elif message['__class__'] == 'BASE58':
+            subclass = BASE58_LOOKUP[message['subclass']]
+            return subclass(message['value'])
         elif message['__class__'] == 'bytes':
             subclass = BYTES_LOOKUP[message['subclass']]
             return subclass(deserialize_bytes(message['value']))
