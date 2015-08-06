@@ -20,23 +20,6 @@ def deserialize_bytes(b64data):
     """Convert str to bytes."""
     return b64decode(b64data.encode())
 
-KNOWN_BASE58 = [
-    bitcoin.wallet.CBitcoinAddress,
-    bitcoin.base58.CBase58Data,
-]
-BASE58_LOOKUP = {cls.__name__:cls for cls in KNOWN_BASE58}
-KNOWN_BYTES = [
-    bytes,
-]
-BYTES_LOOKUP = {cls.__name__:cls for cls in KNOWN_BYTES}
-KNOWN_SERIALIZABLE = [
-    bitcoin.core.CMutableTransaction,
-    bitcoin.core.CTransaction,
-    bitcoin.core.CMutableTxIn,
-    bitcoin.core.CMutableTxOut,
-]
-SERIALIZABLE_LOOKUP = {cls.__name__:cls for cls in KNOWN_SERIALIZABLE}
-
 def subclass_hook(encode, decode, allowed):
     """Generate encode/decode functions for one interface."""
     lookup = {cls.__name__:cls for cls in allowed}
