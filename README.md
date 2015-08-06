@@ -20,8 +20,9 @@ Overview
 
 This is an implementation of a Lightning node. Its goal is to foster experimentation with the Lightning protocol by simultaneously providing a full stack implementation that can stand alone and providing sufficient modularity that the server, the micropayment channel protocol, the routing protocol, and the user interface can all be developed independently of each other.
 
-`demo.py`, described under Usage below, is a good place to play around.
-`test.py` is where I recommend you start reading, specifically TestChannel.test_basic and TestLightning.test_payment.
+`demo.py`, described under Usage below, is a good place to experiment.
+
+`test.py` is where I recommend you start reading, specifically `TestChannel.test_basic` and `TestLightning.test_payment`.
 
 Directory:
 - The server is split across `lightningd.py`, `lightningserver.py`, and `serverutil.py`.
@@ -33,12 +34,13 @@ Docstrings at the top of `serverutil.py`, `channel.py`, and `lightning.py` descr
 Usage
 -----
 
-Grab a bitcoind 10.x executable and put it in the directory.
-This project uses Python 3.
-Set up a virtualenv and install from `requirements.txt`.
-Tests can be run as `python -m unittest`.
-To set up a regtest network, run `python create_regnet.py` OR
-Run `python -i demo.py` to setup a regtest network and get proxies to all three nodes (Read demo.py for usage)
+- Grab a bitcoind 10.x executable and put it in the directory.
+- This project uses Python 3.
+- Set up a virtualenv and install from `requirements.txt`.
+- Tests can be run as `python -m unittest`.
+- To set up a regtest network, run `python create_regnet.py` OR
+- Run `python -i demo.py` to setup a regtest network and get proxies to all three nodes (Read demo.py for usage)
+- Logs are in regnet/*/lightning.log, and are preserved after tests.
 
 Design
 ------
@@ -46,6 +48,7 @@ Design
 The lightning node is split into 4 pieces: the server, micropayment channels, and lightning routing, and the user interface.
 
 The server is responsible for talking to the user and to other nodes. It is currently split across 3 files, `lightningd.py`, `lightningserver.py`, and `serverutil.py`.
+
 1. `lightningd.py` is responsible for parsing the config and handling daemonization.
 2. `lightningserver` is the body of the server, it sets up a Flask app and installs the channel interface, lightning interface, and user interface. The Flask dev server is used, configured to run with multiple processes.
 3. `serverutil.py` This is how the channel, lightning and user interfaces talk with the server. It contains authentication helpers as well as `api_factory`, which provides an API Blueprint object to attach before and after request hooks, and also a decorator which exposes functions to the RPC interface. JSON-RPC is currently used both for inter-node communication as well as user interaction, since JSON-RPC was easy and flexible to implement.
@@ -62,5 +65,7 @@ Testing
 -------
 
 `test.py` currently contains an easy set of positive tests for micropayment channels and routing. More tests need to be written to demonstrate the holes in the current implementation. Specifically, I test that I can set up multiple micropayment channels, send and recieve money in them, spend my entire balance, send payment to a node multiple hops away, and close the channels. I also have a test (currently failing) for the case that Alice sends a revoked commitment transaction and then shuts up, in which case Bob should be able to take all the money in their channel. There is annother test (now passing) for unilateral close. More tests are needed for various other error cases.
+
 Code coverage is not yet set up, since the current problem is not having enough implementation rather than not enough tests. This should change.
+
 The project is currently linted with `pylint *.py`
