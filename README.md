@@ -13,7 +13,8 @@ This is an experimental implementation of a Lightning node.
 License
 -------
 
-This code has not yet been released. I would like to use a very permissive license, such as the MIT license Bitcoin Core uses.
+This code is released under the terms of the MIT license. See [LICENSE](LICENSE) for more
+information or see http://opensource.org/licenses/MIT.
 
 Overview
 --------
