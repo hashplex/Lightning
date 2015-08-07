@@ -22,7 +22,7 @@ This is an implementation of a Lightning node. Its goal is to foster experimenta
 
 `demo.py`, described under Usage below, is a good place to experiment.
 
-`test.py` is where I recommend you start reading, specifically `TestChannel.test_basic` and `TestLightning.test_payment`.
+`test.py` is where I recommend you start reading, specifically `TestChannel.test_basic` and `TestLightning.test_payment`. It demonstrates intended usage of the project.
 
 Directory:
 - The server is split across `lightningd.py`, `lightningserver.py`, and `serverutil.py`.
@@ -34,8 +34,9 @@ Docstrings at the top of `serverutil.py`, `channel.py`, and `lightning.py` descr
 Usage
 -----
 
+This project has only been tested on Ubuntu 14.04 with Python 3.4.0.
+
 - Grab a bitcoind 10.x executable and put it in the directory.
-- This project uses Python 3.
 - Set up a virtualenv and install from `requirements.txt`.
 - Tests can be run as `python -m unittest`.
 - To set up a regtest network, run `python create_regnet.py` OR
