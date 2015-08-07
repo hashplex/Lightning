@@ -4,13 +4,9 @@ Lightning network node implementation
 Lightning
 ---------
 
-https://lightning.network/
+The initial paper on Lightning by Joseph Poon and Thaddeus Dryja: https://lightning.network/
 
 Lightning is a trustless clearinghouse network based on micropayment channels and backed by Bitcoin. It makes fast, cheap microtransactions possible.
-
-http://ozlabs.org/~rusty/ln-deploy-draft-01.pdf
-
-Rusty Russell's paper containing improvements to the Lightning protocol.
 
 This is an experimental implementation of a Lightning node.
 
@@ -63,7 +59,7 @@ Lightning routing functionality resides in `lightning.py`. It contains functions
 
 The user interface currently consists of RPC calls to the /local endpoint. It should be easy to stick a HTML wallet-like user interface on as well, and/or a lightning-qt could be developed. These GUIs would likely talk to lightningd over the aforementiond local RPC interface.
 
-This project is in its infancy. The current implementation is very naive (trusting, slow, unsecured). The next step is to write an implementation which removes these limitations. This project aims to be a testbed to facilitate experimentation with micropayment channels and routing in a fully realized system with integration tests able to validate the whole stack at once. This is in contrast to Rusty Russell's work at [Blockstream](https://github.com/ElementsProject/lightning), where communication, persistence, and user interface questions are currently sidestepped.
+This project is in its infancy. The current implementation is very naive (trusting, slow, unsecured). The next step is to write an implementation which removes these limitations. This project aims to be a testbed to facilitate experimentation with micropayment channels and routing in a fully realized system with integration tests able to validate the whole stack at once.
 
 Testing
 -------
@@ -73,3 +69,10 @@ Testing
 Code coverage is not yet set up, since the current problem is not having enough implementation rather than not enough tests. This should change.
 
 The project is currently linted with `pylint *.py`
+
+Other Work
+----------
+
+This project is founded on work by Joseph Poon and Thaddeus Dryja who wrote the inital Lightning paper. (https://lightning.network/)
+
+Rusty Russel has contributed several improvements to Lightning (http://ozlabs.org/~rusty/ln-deploy-draft-01.pdf), and is working on an implementation (https://github.com/ElementsProject/lightning). His implementation sidesteps questions about communication, persistence, user interface, and routing, all of which this project is designed to address.
