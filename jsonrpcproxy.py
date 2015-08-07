@@ -1,6 +1,28 @@
 #! /usr/bin/env python3
 
-"""A simple json-rpc service proxy with automatic method generation."""
+"""JSON-RPC tools.
+
+Proxy is a simple RPC client with automatic method generation. It supports
+transparent translation of objects specified below.
+AuthProxy is the same as proxy but can authenticate itself with basic auth.
+
+SmartDispatcher is a server component which handles transparent translation
+of the objects specified below.
+
+Objects supported by transparent (automatic) translation:
+* int (standard JSON)
+* str (standard JSON)
+* None (usually caught by JSON-RPC library for notifications)
+* bytes
+* bitcoin.base58.CBase58Data
+  - bitcoin.wallet.CBitcoinAddress
+* bitcoin.core.Serializable
+  - bitcoin.core.CMutableTransaction
+  - bitcoin.core.CMutableTxIn
+  - bitcoin.core.CMutableTxOut
+* list, tuple (converted to list) (recursive)
+* dict (not containing the key '__class__') (recursive)
+"""
 
 from functools import wraps
 import json
@@ -62,7 +84,7 @@ HOOKS = [
 ]
 
 def to_json(message):
-    """Convert an object to JSON representation."""
+    """Prepare message for JSON serialization."""
     if isinstance(message, list) or isinstance(message, tuple):
         return [to_json(sub) for sub in message]
     elif isinstance(message, dict):
@@ -82,7 +104,7 @@ def to_json(message):
         raise Exception("Unable to convert", message)
 
 def from_json(message):
-    """Retrieve an object from JSON representation."""
+    """Retrieve an object from JSON message (undo to_json)."""
     if isinstance(message, list) or isinstance(message, tuple):
         return [from_json(sub) for sub in message]
     elif isinstance(message, int) or isinstance(message, str):

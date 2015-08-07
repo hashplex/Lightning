@@ -1,6 +1,20 @@
 #! /usr/bin/env python3
 
-"""Parse configuration and start lightningserver."""
+"""Parse configuration and start lightningserver.
+
+When run with -daemon, daemonize the process first.
+
+Usage:
+-daemon: daemonize (Default False)
+-debug: use the debug server (Currently conflicts with daemon)
+-datadir=<path>: specify the directory to run in
+-conf=<file>: specify the configuration file (default lightning.conf)
+-port=<port>: specify the port to bind to
+
+Options except for datadir and conf can be specified in the configuration file.
+Command line options take precedence over configuration file options.
+Flag options can be turned off by prefixing with 'no' (Ex: -nodaemon).
+"""
 
 import os.path
 import argparse
@@ -26,9 +40,7 @@ def main():
     add_switch('daemon')
     add_switch('debug')
     parser.add_argument('-port')
-
     args = parser.parse_args()
-
     conf = config.lightning_config(args=vars(args),
                                    datadir=args.datadir,
                                    conf=args.conf)

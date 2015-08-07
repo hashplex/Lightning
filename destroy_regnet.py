@@ -1,6 +1,13 @@
 #! /usr/bin/env python3
 
-"""Clean up the regtest environment from create_regnet."""
+"""Clean up the regtest environment from create_regnet.
+
+This can be run from the command line.
+
+main():
+Go through each node and kill -9 bitcoind and lightningd based on their pid files.
+Then remove the regnet directory.
+"""
 
 import os
 import shutil

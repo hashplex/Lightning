@@ -1,4 +1,9 @@
-"""Local (private) API for a lightning node."""
+"""Local (private) API for a lightning node.
+
+Currently this just collects and exposes methods in channel and lightning.
+A HTML GUI could also be provided here in the future.
+All requests require authentication.
+"""
 
 from serverutil import api_factory, authenticate_before_request
 import channel, lightning

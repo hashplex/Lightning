@@ -30,7 +30,10 @@ def authenticate():
         {'WWW-Authenticate': 'Basic realm="Login Required"'})
 
 def requires_auth(view):
-    """Require basic authentication on requests to this view."""
+    """Require basic authentication on requests to this view.
+
+    Also only accept requests from localhost.
+    """
     @wraps(view)
     def decorated(*args, **kwargs):
         """Decorated version of view that checks authentication."""

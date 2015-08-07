@@ -1,4 +1,8 @@
-"""Run a lightning node."""
+"""Run a lightning node.
+
+Set up the flask development server, and install channel,
+lightning, and local APIs.
+"""
 
 import os
 import os.path
@@ -59,7 +63,6 @@ def run(conf):
 
     port = conf.getint('port')
     app.config['secret'] = b'correct horse battery staple' + bytes(str(port), 'utf8')
-
     app.config.update(conf)
     app.config['bitcoind'] = config.bitcoin_proxy(datadir=conf['datadir'])
     channel.init(app.config)

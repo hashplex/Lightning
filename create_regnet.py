@@ -1,6 +1,18 @@
 #! /usr/bin/env python3
 
-"""Setup a regtest environment for testing and development."""
+"""Setup a regtest environment for testing and development.
+
+This can be run from the command line.
+
+main():
+First, any existing regnet is destroyed.
+A folder called regnet is created, containing folders for three nodes,
+Alice, Bob, and Carol. For each node, bitcoind is started. The bitcoind nodes
+are connected Alice -- Bob -- Carol.
+Lightning nodes are also started for Alice, Bob, and Carol.
+Once all bitcoind nodes have started up, the function returns
+a tuple of config.ProxySet is returned, for Alice, Bob and Carol.
+"""
 
 import os
 import os.path
@@ -99,7 +111,7 @@ def main():
                                   stdout=log_file,
                                   stderr=subprocess.STDOUT)
     def loading_wallet(proxy):
-        """Check if bitcoind has finished loading."""
+        """Check if bitcoind is still loading."""
         try:
             proxy.getinfo()
         except bitcoin.rpc.JSONRPCException as error:
