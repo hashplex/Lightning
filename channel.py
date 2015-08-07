@@ -7,6 +7,7 @@ CHANNEL_OPENED -- a blinker signal sent when a channel is opened.
 Arguments:
 - address -- the url of the counterparty
 
+init(conf) - Set up the database
 create(url, mymoney, theirmoney)
 - Open a channel with the node identified by url,
   where you can send mymoney satoshis, and recieve theirmoney satoshis.
@@ -48,7 +49,11 @@ SIGNALS = Namespace()
 CHANNEL_OPENED = SIGNALS.signal('CHANNEL_OPENED')
 
 class AnchorScriptSig(object):
-    """Class representing the scriptSig satisfying the anchor output"""
+    """Class representing a scriptSig satisfying the anchor output.
+
+    Uses OP_PUBKEY to hold the place of your signature.
+    """
+
     def __init__(self, my_index=0, sig=b'', redeem=b''):
         if my_index == b'':
             my_index = 0
@@ -82,9 +87,18 @@ class AnchorScriptSig(object):
 
 # This should really come from an ORM
 class Channel(object):
-    """Model of a payment channel."""
+    """Model of a payment channel.
+
+    address - counterparty's url
+    anchor - CMutableTxIn representing the spend from the anchor
+    anchor.scriptSig is an instance of AnchorScriptSig
+    our, their - CMutableTxOut representing the negotiated outputs.
+                 Uses CBitcoinAddress for scriptPubKey.
+    """
+
     address = None
     commitment = None
+
     def __init__(self, address, anchor, our, their):
         self.address = address
         self.anchor = anchor
@@ -137,10 +151,12 @@ class Channel(object):
     def sig_for_them(self):
         """Generate a signature for the mirror commitment transaction."""
         transaction = CMutableTransaction([self.anchor], [self.their, self.our])
-        transaction = CMutableTransaction.from_tx(transaction)
+        transaction = CMutableTransaction.from_tx(transaction) # copy
+        # convert scripts to CScript
         transaction.vin[0].scriptSig = transaction.vin[0].scriptSig.to_script()
         for tx_out in transaction.vout:
             tx_out.scriptPubKey = tx_out.scriptPubKey.to_scriptPubKey()
+        # sign
         sighash = SignatureHash(self.anchor.scriptSig.redeem, transaction, 0, SIGHASH_ALL)
         sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
         return sig
@@ -154,6 +170,7 @@ class Channel(object):
         sighash = SignatureHash(self.anchor.scriptSig.redeem, transaction, 0, SIGHASH_ALL)
         sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
         transaction.vin[0].scriptSig = transaction.vin[0].scriptSig.to_script(sig)
+        # verify signing worked
         VerifyScript(transaction.vin[0].scriptSig,
                      self.anchor.scriptSig.redeem.to_p2sh_scriptPubKey(),
                      transaction, 0, (SCRIPT_VERIFY_P2SH,))
@@ -161,6 +178,7 @@ class Channel(object):
 
     def unsigned_settlement(self):
         """Generate the settlement transaction."""
+        # Put outputs in the order of the inputs, so that both versions are the same
         if self.anchor.scriptSig.my_index == 0:
             transaction = CMutableTransaction([self.anchor], [self.our, self.their])
         elif self.anchor.scriptSig.my_index == 1:
@@ -263,25 +281,31 @@ def create(url, mymoney, theirmoney, fees=10000):
     setup and teardown of the channel should be collected at this time.
     """
     bob = jsonrpcproxy.Proxy(url+'channel/')
+    # Choose inputs and change output
     coins, change = select_coins(mymoney + 2 * fees)
     pubkey = get_pubkey()
     my_out_addr = g.bit.getnewaddress()
+    # Tell Bob we want to open a channel
     transaction, redeem, their_out_addr = bob.open_channel(
         g.addr, theirmoney, mymoney, fees,
         coins, change,
         pubkey, my_out_addr)
+    # Sign and send the anchor
     transaction = g.bit.signrawtransaction(transaction)
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
+    # Set up the channel in the DB
     channel = Channel(url,
                       CMutableTxIn(CMutableOutPoint(transaction.GetHash(), 0),
                                    AnchorScriptSig(1, b'', redeem)),
                       CMutableTxOut(mymoney, my_out_addr),
                       CMutableTxOut(theirmoney, their_out_addr))
+    # Exchange signatures for the inital commitment transaction
     channel.anchor.scriptSig.sig = \
         bob.update_anchor(g.addr, transaction.GetHash(), channel.sig_for_them())
     channel.put()
+    # Event: channel opened
     CHANNEL_OPENED.send('channel', address=url)
 
 def send(url, amount):
@@ -292,7 +316,9 @@ def send(url, amount):
     method.
     """
     bob = jsonrpcproxy.Proxy(url+'channel/')
+    # ask Bob to sign the new commitment transactions, and update.
     sig = update_db(url, -amount, bob.propose_update(g.addr, amount))
+    # tell Bob our signature
     bob.recieve(g.addr, amount, sig)
 
 def getbalance(url):
@@ -317,6 +343,7 @@ def close(url):
     were unnecessary."""
     bob = jsonrpcproxy.Proxy(url+'channel/')
     channel = Channel.get(url)
+    # Tell Bob we are closing the channel, and sign the settlement tx
     bob.close_channel(g.addr, channel.settlement_sig())
     channel.delete()
 
@@ -333,20 +360,27 @@ def get_address():
 @REMOTE
 def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, their_pubkey, their_out_addr): # pylint: disable=too-many-arguments
     """Open a payment channel."""
+    # Get inputs and change output
     coins, change = select_coins(mymoney + 2 * fees)
+    # Make the anchor script
     anchor_output_script = anchor_script(get_pubkey(), their_pubkey)
     anchor_output_address = anchor_output_script.to_p2sh_scriptPubKey()
+    # Construct the anchor utxo
     payment = CMutableTxOut(mymoney + theirmoney + 2 * fees, anchor_output_address)
+    # Anchor tx
     transaction = CMutableTransaction(
         their_coins + coins,
         [payment, change, their_change])
+    # Half-sign
     transaction = g.bit.signrawtransaction(transaction)['tx']
+    # Create channel in DB
     channel = Channel(address,
                       CMutableTxIn(CMutableOutPoint(transaction.GetHash(), 0),
                                    AnchorScriptSig(0, b'', anchor_output_script)),
                       CMutableTxOut(mymoney, g.bit.getnewaddress()),
                       CMutableTxOut(theirmoney, their_out_addr))
     channel.put()
+    # Event: channel opened
     CHANNEL_OPENED.send('channel', address=address)
     return (transaction, anchor_output_script, channel.our.scriptPubKey)
 
@@ -378,6 +412,7 @@ def recieve(address, amount, sig):
 def close_channel(address, their_sig):
     """Close a channel."""
     channel = Channel.get(address)
+    # Sign and send settlement tx
     my_sig = channel.settlement_sig()
     transaction = channel.signed_settlement(their_sig)
     g.bit.sendrawtransaction(transaction)
