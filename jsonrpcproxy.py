@@ -122,10 +122,15 @@ def from_json(message):
 
 class SmartDispatcher(Dispatcher):
     """Wrap methods to allow complex objects in JSON RPC calls."""
+
     def __bool__(self): # pylint: disable=no-self-use
         return True
 
     def __getitem__(self, key):
+        """Override __getitem__ to support transparent translation.
+
+        Translate function arguments, return value, and exceptions.
+        """
         old_value = Dispatcher.__getitem__(self, key)
         @wraps(old_value)
         def wrapped(*args, **kwargs):
@@ -146,6 +151,7 @@ class JSONRPCError(Exception):
 
 class Proxy(object): # pylint: disable=too-few-public-methods
     """Remote method call proxy."""
+
     def __init__(self, url):
         self.url = url
         self.headers = {'content-type': 'application/json'}
