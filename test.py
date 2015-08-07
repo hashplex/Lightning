@@ -253,5 +253,19 @@ class TestLightning(unittest.TestCase):
         self.assertEqual(self.alice.lit.getbalance(self.carol.lurl), 55000000 - fee)
         self.assertEqual(self.carol.lit.getbalance(self.bob.lurl), 55000000 + fee2)
 
+    @unittest.expectedFailure
+    def test_route_close(self):
+        """Test routing around closed channels."""
+        # Create a new channel between Alice and Bob
+        # so all 3 are connected to each other.
+        self.alice.lit.create(self.bob.lurl, 25000000, 25000000)
+        # Close the connection between Alice and Carol
+        self.alice.lit.close(self.carol.lurl)
+        self.propagate()
+        # Alice sends 0.10 BTC to Carol
+        self.alice.lit.send(self.carol.lurl, 10000000)
+        # Carol should have recieved money from Bob
+        self.assertEqual(self.carol.lit.getbalance(self.bob.lurl), 60000000)
+
 if __name__ == '__main__':
     unittest.main()
