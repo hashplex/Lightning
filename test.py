@@ -25,6 +25,7 @@ class TestChannel(unittest.TestCase):
         # self.alice.lurl is Alice's identifier
         # Carol will be the miner and generate all the blocks
         # Generate 101 blocks so that Carol has funds
+        print(self.carol.bit.help())
         self.carol.bit.generate(101)
         self.propagate()
         # Give 1 BTC each to Alice and Bob

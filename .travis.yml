@@ -25,6 +25,7 @@ before_script:
   - sudo apt-get update -q
   - sudo apt-get install bitcoind
   - cp /usr/bin/bitcoind bitcoind
+  - ./bitcoind --version
 # command to run tests
 script:
   - python -m unittest
