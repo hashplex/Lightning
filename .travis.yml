@@ -5,9 +5,9 @@ python:
   - "3.5.0b3"
   - "3.5-dev"
   - "nightly"
-  - "2.6"
-  - "2.7"
   - "3.2"
+# It would be nice to at least monitor 2.x.
+# But no tests currently get run. See #16.
 matrix:
   fast_finish: true
   allow_failures:
