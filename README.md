@@ -35,9 +35,10 @@ Docstrings at the top of `serverutil.py`, `channel.py`, and `lightning.py` descr
 Usage
 -----
 
-This project has only been tested on Ubuntu 14.04 with Python 3.4.0.
+I develop on Ubuntu 14.04 with Python 3.4.0.
+Travis tests on Ubuntu 12.04 with Python 3.3+
 
-- Grab a bitcoind 10.x executable and put it in the directory.
+- Grab a bitcoind 0.11.0 executable and put it in the directory.
 - Set up a virtualenv and install from `requirements.txt`.
 - Tests can be run as `python -m unittest`.
 - To set up a regtest network, run `python create_regnet.py` OR
@@ -65,6 +66,8 @@ This project is in its infancy. The current implementation is very naive (trusti
 
 Testing
 -------
+
+Travis CI tests the project against all versions of Python it knows, currently Python 3.3+ are passing.
 
 `test.py` currently contains an easy set of positive tests for micropayment channels and routing. More tests need to be written to demonstrate the holes in the current implementation. Specifically, I test that I can set up multiple micropayment channels, send and recieve money in them, spend my entire balance, send payment to a node multiple hops away, and close the channels. I also have a test (currently failing) for the case that Alice sends a revoked commitment transaction and then shuts up, in which case Bob should be able to take all the money in their channel. There is annother test (now passing) for unilateral close. More tests are needed for various other error cases.
 
