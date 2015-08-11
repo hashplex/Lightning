@@ -1,13 +1,13 @@
 language: python
 python:
-  - "2.6"
-  - "2.7"
-  - "3.2"
-  - "3.3"
+#  - "2.6"
+#  - "2.7"
+#  - "3.2"
+#  - "3.3"
   - "3.4"
-  - "3.5.0b3"
-  - "3.5-dev"
-  - "nightly"
+#  - "3.5.0b3"
+#  - "3.5-dev"
+#  - "nightly"
 matrix:
   allow_failures:
     - python: "2.6"
@@ -21,11 +21,22 @@ matrix:
 install: "pip install -r requirements.txt"
 # Build bitcoind
 before_script:
-  - sudo add-apt-repository ppa:bitcoin/bitcoin -y
-  - sudo apt-get update -q
-  - sudo apt-get install bitcoind
-  - cp /usr/bin/bitcoind bitcoind
-  - ls
+## Install dependencies
+#  - sudo apt-get update -qq
+#  - sudo apt-get install build-essential libtool autotools-dev autoconf pkg-config libssl-dev
+#  - sudo apt-get install libboost-all-dev
+#  - sudo add-apt-repository ppa:bitcoin/bitcoin
+#  - sudo apt-get update
+#  - sudo apt-get install libdb4.8-dev libdb4.8++-dev
+## Build bitcoin from source
+#  - wget https://github.com/bitcoin/bitcoin/archive/v0.11.0.tar.gz
+#  - tar -xzvf v0.11.0.tar.gz
+#  - cd bitcoin-0.11.0 && ./autogen.sh && ./configure && make && cd ..
+#  - cp bitcoin-0.11.0/bitcoind bitcoind
+# Get download bitcoind
+  - wget https://bitcoin.org/bin/bitcoin-core-0.11.0/bitcoin-0.11.0-linux64.tar.gz
+  - tar -xzvf bitcoin-0.11.0-linux64.tar.gz
+  - cp bitcoin-0.11.0/bin/bitcoind bitcoind
 # command to run tests
 script:
   - python -m unittest
