@@ -1,0 +1,30 @@
+language: python
+python:
+  - "2.6"
+  - "2.7"
+  - "3.2"
+  - "3.3"
+  - "3.4"
+  - "3.5.0b3"
+  - "3.5-dev"
+  - "nightly"
+matrix:
+  allow_failures:
+    - python: "2.6"
+    - python: "2.7"
+    - python: "3.2"
+    - python: "3.3"
+    - python: "3.5.0b3"
+    - python: "3.5-dev"
+    - python: "nightly"
+# command to install dependencies
+install: "pip install -r requirements.txt"
+# Build bitcoind
+before_script:
+  - sudo add-apt-repository ppa:bitcoin/bitcoin -y
+  - sudo apt-get update -q
+  - sudo apt-get install bitcoind
+  - cp /usr/bin/bitcoind bitcoind
+# command to run tests
+script:
+  - python -m unittest
