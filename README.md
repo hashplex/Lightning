@@ -1,7 +1,7 @@
 Lightning network node implementation
 =====================================
 
-[![Build Status](https://magnum.travis-ci.com/hashplex/Lightning.svg?token=ndxpyRUbU7iDNR74q8aF&branch=master)](https://magnum.travis-ci.com/hashplex/Lightning)
+[![Build Status](https://travis-ci.org/hashplex/Lightning.svg)](https://travis-ci.org/hashplex/Lightning)
 
 Lightning
 ---------
