@@ -80,6 +80,6 @@ The project is currently linted with `pylint *.py`
 Other Work
 ----------
 
-This project is founded on work by Joseph Poon and Thaddeus Dryja who wrote the inital Lightning paper. (https://lightning.network/)
+This project is founded on work by Joseph Poon and Thaddeus Dryja who wrote the initial Lightning paper. (https://lightning.network/)
 
 Rusty Russel has contributed several improvements to Lightning (http://ozlabs.org/~rusty/ln-deploy-draft-01.pdf), and is working on an implementation (https://github.com/ElementsProject/lightning). His implementation sidesteps questions about communication, persistence, user interface, and routing, all of which this project is designed to address.
