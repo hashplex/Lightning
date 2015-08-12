@@ -2,24 +2,18 @@
 
 import unittest
 import time
-import create_regnet
-from destroy_regnet import stop
+import regnet
 
 class TestChannel(unittest.TestCase):
     """Run basic tests on payment channels."""
     def propagate(self):
         """Ensure all nodes up to date."""
-        while len(set(tuple(sorted(node.bit.getrawmempool()))
-                      for node in [self.alice, self.bob, self.carol])) > 1:
-            time.sleep(0.5)
-        self.carol.bit.generate(1)
-        while self.alice.bit.getblockcount() != self.carol.bit.getblockcount():
-            time.sleep(0.5)
+        self.net.generate()
 
     def setUp(self):
         # Set up 3 nodes: Alice, Bob, and Carol
-        proxies = create_regnet.main()
-        self.alice, self.bob, self.carol = proxies
+        self.net = regnet.create(datadir=None)
+        self.alice, self.bob, self.carol = self.net[0], self.net[1], self.net[2]
         # self.alice.bit is an interface to bitcoind,
         # self.alice.lit talks to the lightning node
         # self.alice.lurl is Alice's identifier
@@ -140,7 +134,7 @@ class TestChannel(unittest.TestCase):
         self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 55000000)
         self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 20000000)
         # Kill Bob
-        stop(self.bob.lpid)
+        self.bob.stop(hard=False, cleanup=False)
         # Publish Alice's commitment transactions
         commitment = self.alice.lit.getcommitmenttransactions(self.bob.lurl)
         for transaction in commitment:
@@ -175,7 +169,7 @@ class TestChannel(unittest.TestCase):
         self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 45000000)
         self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 30000000)
         # Alice stops responding
-        stop(self.alice.lpid)
+        self.alice.stop(hard=False, cleanup=False)
         # She publishes her old, revoked commitment transactions
         for transaction in commitment:
             self.alice.bit.sendrawtransaction(transaction)
@@ -189,17 +183,12 @@ class TestLightning(unittest.TestCase):
     """Run basic tests on payment channels."""
     def propagate(self):
         """Ensure all nodes up to date."""
-        while len(set(tuple(sorted(node.bit.getrawmempool()))
-                      for node in [self.alice, self.bob, self.carol])) > 1:
-            time.sleep(0.5)
-        self.carol.bit.generate(1)
-        while self.alice.bit.getblockcount() != self.carol.bit.getblockcount():
-            time.sleep(0.5)
+        self.net.generate()
 
     def setUp(self):
         # As in TestChannel, set up 3 nodes
-        proxies = create_regnet.main()
-        self.alice, self.bob, self.carol = proxies
+        self.net = regnet.create(datadir=None)
+        self.alice, self.bob, self.carol = self.net[0], self.net[1], self.net[2]
         self.carol.bit.generate(101)
         self.propagate()
         self.carol.bit.sendmany(
