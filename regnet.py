@@ -149,7 +149,7 @@ class BitcoinNode(object):
         """Test if the node is alive."""
         try:
             self.proxy.getinfo()
-        except ConnectionRefusedError:
+        except (ConnectionRefusedError, ConnectionResetError):
             pass
         except bitcoin.rpc.JSONRPCException as err:
             if err.error['code'] == -28:
