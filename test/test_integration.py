@@ -2,7 +2,7 @@
 
 import unittest
 import time
-import regnet
+from test import regnet
 
 class TestChannel(unittest.TestCase):
     """Run basic tests on payment channels."""
