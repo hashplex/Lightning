@@ -22,6 +22,8 @@ BITCOIND = os.path.abspath('bitcoind')
 assert os.path.isfile(BITCOIND)
 LIGHTNINGD = os.path.abspath('lightningd.py')
 assert os.path.isfile(LIGHTNINGD)
+NOTIFY = os.path.abspath('notify.py')
+assert os.path.isfile(NOTIFY)
 
 PORT = itertools.count(18000)
 
@@ -48,8 +50,14 @@ class BitcoinNode(object):
         self.p2p_port = get_port()
         self.rpc_port = get_port()
 
+        notify_path = os.path.join(self.datadir, 'notify.sh')
+        with open(notify_path, 'w'):
+            pass
+
         with open(os.path.join(self.datadir, 'bitcoin.conf'), 'w') as conf:
             conf.write("regtest=1\n")
+            conf.write("walletnotify=sh %s wallet %%s\n" % notify_path)
+            conf.write("blocknotify=sh %s block %%s\n" % notify_path)
             conf.write("rpcuser=rt\n")
             conf.write("rpcpassword=rt\n")
             conf.write("port=%d\n" % self.p2p_port)
@@ -156,6 +164,12 @@ class BitcoinNode(object):
         self.proxy = bitcoin.rpc.Proxy('http://rt:rt@localhost:%d' % self.rpc_port)
         return False
 
+    def add_notify(self, command):
+        """Add a command to be executed on block or wallet notify."""
+        with open(os.path.join(self.datadir, 'notify.sh'), 'a') as notify:
+            notify.write(command)
+            notify.write('\n')
+
 class LightningNode(object):
     """Interface to a lightningd instance."""
 
@@ -169,6 +183,8 @@ class LightningNode(object):
             self.datadir = datadir
 
         self.port = get_port()
+
+        self.bitcoind.add_notify('%s $1 $2 %d' % (NOTIFY, self.port))
 
         with open(os.path.join(self.datadir, 'lightning.conf'), 'w') as conf:
             conf.write("regtest=1\n")
@@ -224,6 +240,7 @@ class LightningNode(object):
             print(log.read())
 
     def is_alive(self):
+        """Check if the node is alive."""
         try:
             return self.proxy.alive()
         except requests.exceptions.ConnectionError:

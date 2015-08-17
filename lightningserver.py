@@ -12,6 +12,7 @@ from flask import Flask, request, current_app, g
 import bitcoin.rpc
 from bitcoin.wallet import CBitcoinSecret
 from serverutil import requires_auth
+from serverutil import WALLET_NOTIFY, BLOCK_NOTIFY
 import channel
 import lightning
 import local
@@ -48,6 +49,20 @@ def get_my_ip():
 def infoweb():
     """Get bitcoind info."""
     return str(app.config['bitcoind'].getinfo())
+
+@app.route('/wallet-notify')
+@requires_auth
+def wallet_notify():
+    """Process a wallet notification."""
+    WALLET_NOTIFY.send('server', tx=request.args['tx'])
+    return "Done"
+
+@app.route('/block-notify')
+@requires_auth
+def block_notify():
+    """Process a block notification."""
+    BLOCK_NOTIFY.send('server', block=request.args['block'])
+    return "Done"
 
 def run(conf):
     """Start the server."""
