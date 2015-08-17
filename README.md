@@ -43,9 +43,7 @@ Travis tests on Ubuntu 12.04 with Python 3.3+
 - Grab a bitcoind 0.11.0 executable and put it in the directory.
 - Set up a virtualenv and install from `requirements.txt`.
 - Tests can be run as `python -m unittest`.
-- To set up a regtest network, run `python create_regnet.py` OR
 - Run `python -i demo.py` to setup a regtest network and get proxies to all three nodes (Read demo.py for usage)
-- Logs are in regnet/*/lightning.log, and are preserved after tests.
 
 Design
 ------
