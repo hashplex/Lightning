@@ -11,7 +11,6 @@ import hashlib
 from flask import Flask, request, current_app, g
 import bitcoin.rpc
 from bitcoin.wallet import CBitcoinSecret
-import config
 from serverutil import requires_auth
 import channel
 import lightning

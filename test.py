@@ -133,14 +133,15 @@ class TestChannel(unittest.TestCase):
         self.bob.lit.send(self.alice.lurl, 5000000)
         self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 55000000)
         self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 20000000)
-        # Kill Bob
-        self.bob.stop(hard=False, cleanup=False)
-        # Publish Alice's commitment transactions
-        commitment = self.alice.lit.getcommitmenttransactions(self.bob.lurl)
-        for transaction in commitment:
-            self.alice.bit.sendrawtransaction(transaction)
+        # Pause Bob
+        with self.bob.paused():
+            # Publish Alice's commitment transactions
+            commitment = self.alice.lit.getcommitmenttransactions(self.bob.lurl)
+            for transaction in commitment:
+                self.alice.bit.sendrawtransaction(transaction)
+                self.propagate()
+            time.sleep(1)
             self.propagate()
-        time.sleep(1)
         self.propagate()
         # Alice and Bob get their money out
         self.assertGreaterEqual(self.bob.bit.getbalance(), 95000000 - bfee)
@@ -168,9 +169,7 @@ class TestChannel(unittest.TestCase):
         self.alice.lit.send(self.bob.lurl, 10000000)
         self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 45000000)
         self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 30000000)
-        # Alice stops responding
-        self.alice.stop(hard=False, cleanup=False)
-        # She publishes her old, revoked commitment transactions
+        # Alice publishes her old, revoked commitment transactions
         for transaction in commitment:
             self.alice.bit.sendrawtransaction(transaction)
             self.propagate()

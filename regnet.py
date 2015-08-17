@@ -4,10 +4,12 @@
 
 import os
 import os.path
+import http.client
 import shutil
 import subprocess
 import signal
 import itertools
+from contextlib import contextmanager
 import time
 import tempfile
 import bitcoin
@@ -64,6 +66,11 @@ class BitcoinNode(object):
                 shutil.copytree(os.path.join(cache.name, cached_dir),
                                 os.path.join(restore_dir, cached_dir))
 
+        self.process, self.proxy = None, None
+        self.start()
+
+    def start(self):
+        """Start the node."""
         self.process = subprocess.Popen(
             [
                 BITCOIND, '-datadir=%s' % self.datadir, '-debug',
@@ -73,7 +80,6 @@ class BitcoinNode(object):
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT)
-
         self.proxy = bitcoin.rpc.Proxy('http://rt:rt@localhost:%d' % self.rpc_port)
 
     def stop(self, hard=False, cleanup=False):
@@ -92,6 +98,15 @@ class BitcoinNode(object):
     def cleanup(self):
         """Remove the files."""
         shutil.rmtree(self.datadir, ignore_errors=True)
+
+    @contextmanager
+    def paused(self):
+        """Context manager to pause a node."""
+        self.stop(hard=False, cleanup=False)
+        yield
+        self.start()
+        while not self.is_alive():
+            time.sleep(0.1)
 
     def print_log(self):
         """Print the log file."""
@@ -122,18 +137,23 @@ class BitcoinNode(object):
         self.proxy.generate(blocks)
 
     def is_alive(self):
+        """Test if the node is alive."""
         try:
             self.proxy.getinfo()
-        except ConnectionRefusedError as err:
-            self.proxy = bitcoin.rpc.Proxy('http://rt:rt@localhost:%d' % self.rpc_port)
-            return False
+        except ConnectionRefusedError:
+            pass
         except bitcoin.rpc.JSONRPCException as err:
             if err.error['code'] == -28:
-                return False
+                pass
             else:
                 raise
+        except http.client.BadStatusLine:
+            pass
         else:
             return True
+        # Reinitialize proxy
+        self.proxy = bitcoin.rpc.Proxy('http://rt:rt@localhost:%d' % self.rpc_port)
+        return False
 
 class LightningNode(object):
     """Interface to a lightningd instance."""
@@ -158,6 +178,11 @@ class LightningNode(object):
             conf.write("bitpass=rt\n")
             conf.write("bitport=%d\n" % self.bitcoind.rpc_port)
 
+        self.logfile, self.process, self.proxy = None, None, None
+        self.start()
+
+    def start(self):
+        """Start the node."""
         self.logfile = open(os.path.join(self.datadir, 'lightning.log'), 'w')
         self.process = subprocess.Popen(
             [
@@ -185,6 +210,13 @@ class LightningNode(object):
         """Remove the files."""
         shutil.rmtree(self.datadir, ignore_errors=True)
 
+    @contextmanager
+    def paused(self):
+        """Context manager to pause a node."""
+        self.stop(cleanup=False)
+        yield
+        self.start()
+
     def print_log(self):
         """Print the log file."""
         with open(os.path.join(self.datadir, 'lightning.log')) as log:
@@ -200,6 +232,11 @@ class FullNode(object):
                                    peers=[peer.bitcoin for peer in peers])
         self.lightning = LightningNode(self.bitcoin,
                                        os.path.join(self.bitcoin.datadir, 'lightning'))
+
+    def start(self):
+        """Start the node."""
+        self.bitcoin.start()
+        self.lightning.start()
 
     @property
     def bit(self):
@@ -228,6 +265,15 @@ class FullNode(object):
         self.lightning.cleanup()
         self.bitcoin.cleanup()
 
+    @contextmanager
+    def paused(self):
+        """Context manager to pause a node."""
+        self.stop(hard=False, cleanup=False)
+        yield
+        self.start()
+        while not self.is_alive():
+            time.sleep(0.1)
+
     def print_log(self, bit=True, lit=True):
         """Print logs."""
         if bit:
@@ -248,6 +294,7 @@ class FullNode(object):
         self.bitcoin.generate(blocks)
 
     def is_alive(self):
+        """Test if the node is alive."""
         return self.bitcoin.is_alive()
 
 class RegtestNetwork(object):
@@ -300,7 +347,8 @@ class RegtestNetwork(object):
     def sync(self, sleep_delay=0.1):
         """Synchronize the network."""
         miner_state = self.miner.sync_state
-        while any(node.sync_state() != miner_state for node in self.nodes):
+        while any(node.sync_state() != miner_state for node in self.nodes
+                  if node.is_alive()):
             time.sleep(sleep_delay)
             miner_state = self.miner.sync_state()
 
