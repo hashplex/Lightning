@@ -30,7 +30,7 @@ class TestChannel(unittest.TestCase):
         self.propagate()
 
     def tearDown(self):
-        pass #destroy_regnet.main()
+        self.net.stop(hard=True, cleanup=True)
 
     def test_setup(self):
         """Test that the setup worked."""
@@ -204,7 +204,7 @@ class TestLightning(unittest.TestCase):
         self.propagate()
 
     def tearDown(self):
-        pass #destroy_regnet.main()
+        self.net.stop(hard=True, cleanup=True)
 
     def test_setup(self):
         """Test that the setup worked."""

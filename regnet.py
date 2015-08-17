@@ -151,14 +151,17 @@ class LightningNode(object):
             conf.write("rpcuser=rt\n")
             conf.write("rpcpassword=rt\n")
             conf.write("port=%d\n" % self.port)
+            conf.write("bituser=rt\n")
+            conf.write("bitpass=rt\n")
+            conf.write("bitport=%d\n" % self.bitcoind.rpc_port)
 
+        self.logfile = open(os.path.join(self.datadir, 'lightning.log'), 'w')
         self.process = subprocess.Popen(
             [
-                LIGHTNINGD, '-datadir=%s' % self.datadir, '-nodebug',
-                '-regtest',
+                LIGHTNINGD, '-datadir=%s' % self.datadir, '-nodebug'
             ],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
+            stdout=self.logfile,
             stderr=subprocess.STDOUT)
 
         self.proxy = jsonrpcproxy.AuthProxy(
@@ -168,6 +171,7 @@ class LightningNode(object):
     def stop(self, cleanup=False):
         """Kill lightningd."""
         self.process.kill()
+        self.logfile.close()
         if cleanup:
             self.cleanup()
 
@@ -257,7 +261,7 @@ class RegtestNetwork(object):
         self.nodes = [Node(os.path.join(self.datadir, 'node%d' % i),
                            cache=node_cache, peers=[self.miner,])
                       for i, node_cache in zip(range(degree), node_caches)]
-        while not (all(node.is_alive() for node in self.nodes) and self.miner.is_alive):
+        while not (all(node.is_alive() for node in self.nodes) and self.miner.is_alive()):
             print("Connect failed")
             time.sleep(0.5)
 
