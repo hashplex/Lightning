@@ -16,4 +16,9 @@ REMOTE(channel.close)
 REMOTE(channel.getbalance)
 REMOTE(channel.getcommitmenttransactions)
 
+@REMOTE
+def alive():
+    """Test if the server is ready to handle requests."""
+    return True
+
 API.before_request(authenticate_before_request)

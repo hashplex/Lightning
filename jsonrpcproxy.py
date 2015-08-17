@@ -123,9 +123,6 @@ def from_json(message):
 class SmartDispatcher(Dispatcher):
     """Wrap methods to allow complex objects in JSON RPC calls."""
 
-    def __bool__(self): # pylint: disable=no-self-use
-        return True
-
     def __getitem__(self, key):
         """Override __getitem__ to support transparent translation.
 

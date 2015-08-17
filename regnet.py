@@ -12,6 +12,7 @@ import itertools
 from contextlib import contextmanager
 import time
 import tempfile
+import requests.exceptions
 import bitcoin
 import bitcoin.rpc
 import jsonrpcproxy
@@ -21,6 +22,8 @@ BITCOIND = os.path.abspath('bitcoind')
 assert os.path.isfile(BITCOIND)
 LIGHTNINGD = os.path.abspath('lightningd.py')
 assert os.path.isfile(LIGHTNINGD)
+NOTIFY = os.path.abspath('notify.py')
+assert os.path.isfile(NOTIFY)
 
 PORT = itertools.count(18000)
 
@@ -32,7 +35,7 @@ class BitcoinNode(object):
     """Interface to a bitcoind instance."""
 
     CACHE_FILES = ['wallet.dat']
-    CACHE_DIRS = ['blocks', 'chainstate', 'database']
+    CACHE_DIRS = ['blocks', 'chainstate']
 
     def __init__(self, datadir=None, cache=None, peers=None):
         if peers is None:
@@ -47,8 +50,14 @@ class BitcoinNode(object):
         self.p2p_port = get_port()
         self.rpc_port = get_port()
 
+        notify_path = os.path.join(self.datadir, 'notify.sh')
+        with open(notify_path, 'w'):
+            pass
+
         with open(os.path.join(self.datadir, 'bitcoin.conf'), 'w') as conf:
             conf.write("regtest=1\n")
+            conf.write("walletnotify=sh %s wallet %%s\n" % notify_path)
+            conf.write("blocknotify=sh %s block %%s\n" % notify_path)
             conf.write("rpcuser=rt\n")
             conf.write("rpcpassword=rt\n")
             conf.write("port=%d\n" % self.p2p_port)
@@ -140,7 +149,7 @@ class BitcoinNode(object):
         """Test if the node is alive."""
         try:
             self.proxy.getinfo()
-        except ConnectionRefusedError:
+        except (ConnectionRefusedError, ConnectionResetError):
             pass
         except bitcoin.rpc.JSONRPCException as err:
             if err.error['code'] == -28:
@@ -155,6 +164,12 @@ class BitcoinNode(object):
         self.proxy = bitcoin.rpc.Proxy('http://rt:rt@localhost:%d' % self.rpc_port)
         return False
 
+    def add_notify(self, command):
+        """Add a command to be executed on block or wallet notify."""
+        with open(os.path.join(self.datadir, 'notify.sh'), 'a') as notify:
+            notify.write(command)
+            notify.write('\n')
+
 class LightningNode(object):
     """Interface to a lightningd instance."""
 
@@ -168,6 +183,8 @@ class LightningNode(object):
             self.datadir = datadir
 
         self.port = get_port()
+
+        self.bitcoind.add_notify('%s $1 $2 %d' % (NOTIFY, self.port))
 
         with open(os.path.join(self.datadir, 'lightning.conf'), 'w') as conf:
             conf.write("regtest=1\n")
@@ -221,6 +238,18 @@ class LightningNode(object):
         """Print the log file."""
         with open(os.path.join(self.datadir, 'lightning.log')) as log:
             print(log.read())
+
+    def is_alive(self):
+        """Check if the node is alive."""
+        try:
+            return self.proxy.alive()
+        except requests.exceptions.ConnectionError:
+            pass
+        # Reinitialize proxy
+        self.proxy = jsonrpcproxy.AuthProxy(
+            'http://localhost:%d/local/' % self.port,
+            ('rt', 'rt'))
+        return False
 
 class FullNode(object):
     """Combined Lightning and Bitcoin node."""
@@ -295,10 +324,29 @@ class FullNode(object):
 
     def is_alive(self):
         """Test if the node is alive."""
-        return self.bitcoin.is_alive()
+        return self.bitcoin.is_alive() and self.lightning.is_alive()
 
 class RegtestNetwork(object):
     """Regtest network."""
+
+    class Cache(object): # pylint: disable=too-few-public-methods
+        """Container for miner and node caches."""
+
+        def __init__(self, miner_cache, node_caches):
+            self.miner_cache = miner_cache
+            self.node_caches = node_caches
+
+        def cleanup(self):
+            """Clean up miner and node caches."""
+            self.miner_cache.cleanup()
+            for node_cache in self.node_caches:
+                node_cache.cleanup()
+
+        def __enter__(self):
+            pass
+
+        def __exit__(self, dummy_type, dummy_value, dummy_traceback):
+            self.cleanup()
 
     def __init__(self, Node=BitcoinNode, degree=3, datadir=None, cache=None):
         if datadir is None:
@@ -307,15 +355,16 @@ class RegtestNetwork(object):
             os.mkdir(datadir, 0o700)
             self.datadir = datadir
         if cache is None:
-            cache = (None, tuple(None for i in range(degree)))
-        miner_cache, node_caches = cache # pylint: disable=unpacking-non-sequence
-        assert len(node_caches) == degree
-        self.miner = Node(os.path.join(self.datadir, 'miner'), cache=miner_cache)
+            cache = self.Cache(None, tuple(None for i in range(degree)))
+        assert len(cache.node_caches) == degree
+        self.miner = Node(os.path.join(self.datadir, 'miner'), cache=cache.miner_cache)
         self.nodes = [Node(os.path.join(self.datadir, 'node%d' % i),
                            cache=node_cache, peers=[self.miner,])
-                      for i, node_cache in zip(range(degree), node_caches)]
+                      for i, node_cache in zip(range(degree), cache.node_caches)]
         while not (all(node.is_alive() for node in self.nodes) and self.miner.is_alive()):
             time.sleep(0.1)
+        # sync nodes
+        self.generate()
 
     def stop(self, hard=False, cleanup=False):
         """Stop all nodes."""
@@ -334,7 +383,7 @@ class RegtestNetwork(object):
 
     def cache(self):
         """Return a cache object."""
-        return (self.miner.cache(), tuple(node.cache for node in self.nodes))
+        return self.Cache(self.miner.cache(), tuple(node.cache() for node in self.nodes))
 
     def print_log(self):
         """Print logs."""
@@ -369,6 +418,7 @@ def make_cache():
         "",
         {network[0].proxy.getnewaddress(): 100000000,
          network[1].proxy.getnewaddress(): 100000000,
+         network[2].proxy.getnewaddress(): 200000000,
         })
     network.sync()
     network.stop(hard=False, cleanup=False)

@@ -7,12 +7,23 @@ requires_auth -- decorator which makes a view function require authentication
 authenticate_before_request -- a before_request callback for auth
 api_factory -- returns a flask Blueprint or equivalent, along with a decorator
                making functions availiable as RPCs.
+
+Signals:
+WALLET_NOTIFY: sent when bitcoind tells us it has a transaction.
+- tx = txid
+BLOCK_NOTIFY: send when bitcoind tells us it has a block
+- block = block hash
 """
 
 from functools import wraps
 from flask import current_app, Response, request, Blueprint
+from blinker import Namespace
 from jsonrpc.backend.flask import JSONRPCAPI
 from jsonrpcproxy import SmartDispatcher
+
+SIGNALS = Namespace()
+WALLET_NOTIFY = SIGNALS.signal('WALLET_NOTIFY')
+BLOCK_NOTIFY = SIGNALS.signal('BLOCK_NOTIFY')
 
 # Copied from http://flask.pocoo.org/snippets/8/
 def check_auth(username, password):

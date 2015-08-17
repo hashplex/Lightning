@@ -6,28 +6,26 @@ import regnet
 
 class TestChannel(unittest.TestCase):
     """Run basic tests on payment channels."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cache = regnet.make_cache()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.cache.cleanup()
+
     def propagate(self):
         """Ensure all nodes up to date."""
         self.net.generate()
 
     def setUp(self):
         # Set up 3 nodes: Alice, Bob, and Carol
-        self.net = regnet.create(datadir=None)
+        self.net = regnet.create(datadir=None, cache=self.cache)
         self.alice, self.bob, self.carol = self.net[0], self.net[1], self.net[2]
         # self.alice.bit is an interface to bitcoind,
         # self.alice.lit talks to the lightning node
         # self.alice.lurl is Alice's identifier
-        # Carol will be the miner and generate all the blocks
-        # Generate 101 blocks so that Carol has funds
-        self.carol.bit.generate(101)
-        self.propagate()
-        # Give 1 BTC each to Alice and Bob
-        self.carol.bit.sendmany(
-            "",
-            {self.alice.bit.getnewaddress(): 100000000,
-             self.bob.bit.getnewaddress(): 100000000,
-            })
-        self.propagate()
 
     def tearDown(self):
         self.net.stop(hard=True, cleanup=True)
@@ -180,22 +178,23 @@ class TestChannel(unittest.TestCase):
 
 class TestLightning(unittest.TestCase):
     """Run basic tests on payment channels."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cache = regnet.make_cache()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.cache.cleanup()
+
     def propagate(self):
         """Ensure all nodes up to date."""
         self.net.generate()
 
     def setUp(self):
         # As in TestChannel, set up 3 nodes
-        self.net = regnet.create(datadir=None)
+        self.net = regnet.create(datadir=None, cache=self.cache)
         self.alice, self.bob, self.carol = self.net[0], self.net[1], self.net[2]
-        self.carol.bit.generate(101)
-        self.propagate()
-        self.carol.bit.sendmany(
-            "",
-            {self.alice.bit.getnewaddress(): 100000000,
-             self.bob.bit.getnewaddress(): 100000000,
-            })
-        self.propagate()
         # Set up channels between so the network is Alice - Carol - Bob
         self.alice.lit.create(self.carol.lurl, 50000000, 50000000)
         self.propagate()
