@@ -79,7 +79,10 @@ class BitcoinNode(object):
     def stop(self, hard=False, cleanup=False):
         """Stop bitcoind."""
         if hard:
-            self.process.kill()
+            try:
+                self.process.kill()
+            except ProcessLookupError:
+                pass
         else:
             self.proxy.stop()
             self.process.wait()
@@ -170,7 +173,10 @@ class LightningNode(object):
 
     def stop(self, cleanup=False):
         """Kill lightningd."""
-        self.process.kill()
+        try:
+            self.process.kill()
+        except ProcessLookupError:
+            pass
         self.logfile.close()
         if cleanup:
             self.cleanup()
@@ -262,8 +268,7 @@ class RegtestNetwork(object):
                            cache=node_cache, peers=[self.miner,])
                       for i, node_cache in zip(range(degree), node_caches)]
         while not (all(node.is_alive() for node in self.nodes) and self.miner.is_alive()):
-            print("Connect failed")
-            time.sleep(0.5)
+            time.sleep(0.1)
 
     def stop(self, hard=False, cleanup=False):
         """Stop all nodes."""
