@@ -21,7 +21,7 @@ Objects supported by transparent (automatic) translation:
   - bitcoin.core.CMutableTxIn
   - bitcoin.core.CMutableTxOut
 * list, tuple (converted to list) (recursive)
-* dict (not containing the key '__class__') (recursive)
+* dict (keys int or str) (not containing the key '__class__') (recursive)
 """
 
 from functools import wraps
