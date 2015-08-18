@@ -25,7 +25,7 @@ This is an implementation of a Lightning node. Its goal is to foster experimenta
 
 `demo.py`, described under Usage below, is a good place to experiment.
 
-`test.py` is where I recommend you start reading, specifically `TestChannel.test_basic` and `TestLightning.test_payment`. It demonstrates intended usage of the project.
+`test/test_integration.py` is where I recommend you start reading, specifically `TestChannel.test_basic` and `TestLightning.test_payment`. It demonstrates intended usage of the project.
 
 Directory:
 - The server is split across `lightningd.py`, `lightningserver.py`, and `serverutil.py`.
@@ -69,7 +69,7 @@ Testing
 
 Travis CI tests the project against all versions of Python it knows, currently Python 3.3+ are passing.
 
-`test.py` currently contains an easy set of positive tests for micropayment channels and routing. More tests need to be written to demonstrate the holes in the current implementation. Specifically, I test that I can set up multiple micropayment channels, send and recieve money in them, spend my entire balance, send payment to a node multiple hops away, and close the channels. I also have a test (currently failing) for the case that Alice sends a revoked commitment transaction and then shuts up, in which case Bob should be able to take all the money in their channel. There is annother test (now passing) for unilateral close. More tests are needed for various other error cases.
+`test/test_integration.py` currently contains an easy set of positive tests for micropayment channels and routing. More tests need to be written to demonstrate the holes in the current implementation. Specifically, I test that I can set up multiple micropayment channels, send and recieve money in them, spend my entire balance, send payment to a node multiple hops away, and close the channels. I also have a test (currently failing) for the case that Alice sends a revoked commitment transaction and then shuts up, in which case Bob should be able to take all the money in their channel. There is annother test (now passing) for unilateral close. More tests are needed for various other error cases.
 
 Code coverage is not yet set up, since the current problem is not having enough implementation rather than not enough tests. This should change.
 

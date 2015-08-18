@@ -9,18 +9,28 @@ True
 
 Check balances:
 >>> balances()
-(89970000, 109980000, 24799969775)
+(89970000, 109980000, 199970000)
 
 Read test.py for more example usage.
 """
 
 # pylint: disable=invalid-name
 
-import test
-TEST_CASE = test.TestLightning()
-TEST_CASE.setUp()
-
-alice, bob, carol = TEST_CASE.alice, TEST_CASE.bob, TEST_CASE.carol
+import test.regnet as regnet
+NET = regnet.create(datadir=None)
+NET.generate(101)
+NET.miner.bit.sendmany(
+    "",
+    {NET[0].bit.getnewaddress(): 100000000,
+     NET[1].bit.getnewaddress(): 100000000,
+     NET[2].bit.getnewaddress(): 200000000,
+    })
+NET.sync()
+alice, bob, carol = NET[0], NET[1], NET[2]
+alice.lit.create(carol.lurl, 50000000, 50000000)
+NET.generate()
+bob.lit.create(carol.lurl, 50000000, 50000000)
+NET.generate()
 
 def balances():
     """Return the total balances of Alice, Bob, and Carol."""
