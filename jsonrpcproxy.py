@@ -34,6 +34,9 @@ from bitcoin.core.serialize import Serializable
 import bitcoin.wallet
 import bitcoin.base58
 
+class ConversionError(Exception):
+    """Error in conversion to or from JSON."""
+
 def serialize_bytes(bytedata):
     """Convert bytes to str."""
     return b64encode(bytedata).decode()
@@ -51,7 +54,7 @@ def subclass_hook(encode, decode, allowed):
             if isinstance(message, cls):
                 return {'subclass':cls.__name__,
                         'value':encode(message)}
-        raise Exception("Unknown message type", type(message).__name__)
+        raise ConversionError("Unknown message type", type(message).__name__)
     def decode_subclass(message):
         """Recover message from JSON."""
         cls = lookup[message['subclass']]
@@ -101,7 +104,7 @@ def to_json(message):
                 assert '__class__' not in out
                 out['__class__'] = cls.__name__
                 return out
-        raise Exception("Unable to convert", message)
+        raise ConversionError("Unable to convert", message)
 
 def from_json(message):
     """Retrieve an object from JSON message (undo to_json)."""
@@ -118,7 +121,16 @@ def from_json(message):
             for cls, codes in HOOKS:
                 if message['__class__'] == cls.__name__:
                     return codes[1](message)
-    raise Exception("Unable to convert", message)
+    raise ConversionError("Unable to convert", message)
+
+def convert_exception(exception):
+    def force_convert(value):
+        try:
+            return to_json(value)
+        except ConversionError:
+            return to_json(repr(value))
+    exception.args = [force_convert(arg) for arg in exception.args]
+    return exception
 
 class SmartDispatcher(Dispatcher):
     """Wrap methods to allow complex objects in JSON RPC calls."""
@@ -136,7 +148,7 @@ class SmartDispatcher(Dispatcher):
                 return to_json(old_value(*from_json(args),
                                          **from_json(kwargs)))
             except Exception as exception:
-                exception.args = to_json(exception.args)
+                convert_exception(exception)
                 raise
         return wrapped
 

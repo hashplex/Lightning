@@ -51,3 +51,56 @@ class TestTranslation(unittest.TestCase):
         self.assertEqual(from_json(to_json(
             CBase58Data.from_bytes(b'\x00\x01\xFF', 42))).nVersion,
             42)
+
+    def test_tuple(self):
+        value = (1, 'a', b'b',)
+        self.assertEqual(from_json(to_json(value)), list(value))
+
+class TestDispatcher(unittest.TestCase):
+    def setUp(self):
+        self.dispatcher = SmartDispatcher()
+        self.add = self.dispatcher.add_method
+
+    def test_echo(self):
+        self.add(lambda x:x, 'echo')
+        echo = self.dispatcher['echo']
+        VALUES = [
+            42, "str", b"\x00\x01\xFFbytes",
+            {1: b"dict",}, [1, "list", b"bytes",],
+        ]
+        for value in VALUES:
+            with self.subTest(value=value):
+                self.assertEqual(from_json(echo(to_json(value))), value)
+
+    def test_type(self):
+        self.add(lambda x:str(type(x)), 'type')
+        typeof = self.dispatcher['type']
+        VALUES = [
+            42, "str", b"\x00\x01\xFFbytes",
+            {1: b"dict",}, [1, "list", b"bytes",],
+        ]
+        for value in VALUES:
+            with self.subTest(value=value):
+                self.assertEqual(from_json(typeof(to_json(value))),
+                                 str(type(value)))
+
+    def test_error(self):
+        class TestException(Exception):
+            pass
+        @self.add
+        def error(args):
+            raise TestException(*args)
+        error = self.dispatcher['error']
+        VALUES = [
+            ('ordinary', 1, 2, 'foo',),
+            ('bytes', b'\x00\x01\xFF',),
+            ('list', [1, 'a', b'b',],),
+        ]
+        for value in VALUES:
+            with self.subTest(value=value):
+                self.assertRaises(TestException, error, to_json(value))
+
+        @self.add
+        def nested_error():
+            raise TestException('nested', TestException('2nd layer'))
+        self.assertRaises(TestException, self.dispatcher['nested_error'])
