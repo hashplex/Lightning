@@ -39,8 +39,7 @@ class TestTranslation(unittest.TestCase):
             [{3: [0, 1, 2,],}, [[b'\xFFRecursion Test',],],],
         ]
         for value in VALUES:
-            with self.subTest(value=value):
-                self.assertEqual(from_json(to_json(value)), value)
+            self.assertEqual(from_json(to_json(value)), value)
 
     def test_None_hiding(self):
         # Our jsonrpc server library gets confused when functions return None
@@ -69,8 +68,7 @@ class TestDispatcher(unittest.TestCase):
             {1: b"dict",}, [1, "list", b"bytes",],
         ]
         for value in VALUES:
-            with self.subTest(value=value):
-                self.assertEqual(from_json(echo(to_json(value))), value)
+            self.assertEqual(from_json(echo(to_json(value))), value)
 
     def test_type(self):
         self.add(lambda x:str(type(x)), 'type')
@@ -80,9 +78,8 @@ class TestDispatcher(unittest.TestCase):
             {1: b"dict",}, [1, "list", b"bytes",],
         ]
         for value in VALUES:
-            with self.subTest(value=value):
-                self.assertEqual(from_json(typeof(to_json(value))),
-                                 str(type(value)))
+            self.assertEqual(from_json(typeof(to_json(value))),
+                             str(type(value)))
 
     def test_error(self):
         class TestException(Exception):
@@ -97,8 +94,7 @@ class TestDispatcher(unittest.TestCase):
             ('list', [1, 'a', b'b',],),
         ]
         for value in VALUES:
-            with self.subTest(value=value):
-                self.assertRaises(TestException, error, to_json(value))
+            self.assertRaises(TestException, error, to_json(value))
 
         @self.add
         def nested_error():
