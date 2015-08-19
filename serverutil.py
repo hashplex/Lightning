@@ -80,11 +80,16 @@ def api_factory(name):
         """Create the database."""
         database.create_all(name)
     api.before_app_first_request(initialize_database)
-    class BoundModel(database.Model):
+    class BoundMeta(type(database.Model)):
+        def __init__(self, cls_name, bases, attrs):
+            assert '__bind_key__' not in attrs
+            if not attrs.get('__abstract__', False):
+                attrs['__bind_key__'] = name
+            type(database.Model).__init__(self, cls_name, bases, attrs)
+    class BoundModel(database.Model, metaclass=BoundMeta):
         __abstract__ = True
-    BoundModel.__bind_key__ = name
 
     rpc_api = JSONRPCAPI(SmartDispatcher())
     assert type(rpc_api.dispatcher == SmartDispatcher)
     api.add_url_rule('/', 'rpc', rpc_api.as_view(), methods=['POST'])
-    return api, rpc_api.dispatcher.add_method
+    return api, rpc_api.dispatcher.add_method, BoundModel

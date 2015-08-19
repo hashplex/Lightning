@@ -109,6 +109,5 @@ if __name__ == '__main__':
     app.register_blueprint(local.API)
 
     channel.init(app.config)
-    lightning.init(app.config)
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False,
             processes=3)

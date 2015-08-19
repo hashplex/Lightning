@@ -25,70 +25,75 @@ import os.path
 import sqlite3
 from flask import g
 import jsonrpcproxy
-from serverutil import api_factory, requires_auth
+from serverutil import api_factory, requires_auth, database
 import channel
+from sqlalchemy import Column, Integer, String
 
-API, REMOTE = api_factory('lightning')
+API, REMOTE, Model = api_factory('lightning')
 
-def init(conf):
-    """Set up the database."""
-    conf['lit_data_path'] = os.path.join(conf['datadir'], 'lightning.dat')
-    if not os.path.isfile(conf['lit_data_path']):
-        dat = sqlite3.connect(conf['lit_data_path'])
-        with dat:
-            dat.execute("CREATE TABLE PEERS(address, fees)")
-            dat.execute("CREATE TABLE ROUTES(address, cost, nexthop)")
+class Peer(Model):
+    """Database model of a peer node."""
 
-@API.before_app_request
-def before_request():
-    """Connect to database."""
-    g.ldat = sqlite3.connect(g.config['lit_data_path'])
+    __tablename__ = "peers"
 
-@API.teardown_app_request
-def teardown_request(dummyexception):
-    """Close database connection."""
-    dat = getattr(g, 'ldat', None)
-    if dat is not None:
-        g.ldat.close()
+    address = Column(String, primary_key=True)
+    fees = Column(Integer)
 
-@API.route('/dump')
-@requires_auth
-def dump():
-    """Dump the DB."""
-    return '\n'.join(line for line in g.ldat.iterdump())
+    def __init__(self, address, fees):
+        self.address = address
+        self.fees = fees
+
+class Route(Model):
+    """Database model of a route."""
+
+    __tablename__ = "routes"
+
+    address = Column(String, primary_key=True)
+    cost = Column(Integer)
+    next_hop = Column(String)
+
+    def __init__(self, address, cost, next_hop):
+        self.address = address
+        self.cost = cost
+        self.next_hop = next_hop
 
 @channel.CHANNEL_OPENED.connect_via('channel')
 def on_open(dummy_sender, address, **dummy_args):
     """Routing update on open."""
     fees = 10000
     # Add the new peer
-    with g.ldat:
-        g.ldat.execute("INSERT INTO PEERS VALUES (?, ?)", (address, fees))
+    peer = Peer(address, fees)
+    database.session.add(peer)
     # Broadcast a routing update
     update(address, address, 0)
     # The new peer doesn't know all our routes.
     # As a hack, rebuild/rebroadcast the whole routing table.
-    rows = g.ldat.execute("SELECT * from ROUTES").fetchall()
-    with g.ldat:
-        g.ldat.execute("DELETE FROM ROUTES")
-    for address, cost, next_hop in rows:
-        update(next_hop, address, cost)
+    routes = Route.query.all()
+    Route.query.delete()
+    database.session.commit()
+    for route in routes:
+        update(route.next_hop, route.address, route.cost)
 
 @REMOTE
 def update(next_hop, address, cost):
     """Routing update."""
     # Check previous route, and only update if this is an improvement
-    row = g.ldat.execute("SELECT cost FROM ROUTES WHERE address = ?", (address,)).fetchone()
-    if row is not None and row[0] <= cost or address == g.addr:
-        return True
-    # Insert the route
-    with g.ldat:
-        g.ldat.execute("DELETE FROM ROUTES WHERE address = ?", (address,))
-        g.ldat.execute("INSERT INTO ROUTES VALUES (?, ?, ?)", (address, cost, next_hop))
+    if address == g.addr:
+        return
+    route = Route.query.get(address)
+    if route is None:
+        route = Route(address, cost, next_hop)
+        database.session.add(route)
+    elif route.cost <= cost:
+        return
+    else:
+        route.cost = cost
+        route.next_hop = next_hop
     # Tell all our peers
-    for peer, fees in g.ldat.execute("SELECT address, fees from PEERS"):
-        bob = jsonrpcproxy.Proxy(peer+'lightning/')
-        bob.update(g.addr, address, cost + fees)
+    database.session.commit()
+    for peer in Peer.query.all():
+        bob = jsonrpcproxy.Proxy(peer.address + 'lightning/')
+        bob.update(g.addr, address, cost + peer.fees)
     return True
 
 @REMOTE
@@ -100,18 +105,16 @@ def send(url, amount):
     """
     # Paying ourself is easy
     if url == g.addr:
-        return True
-    row = g.ldat.execute("SELECT nexthop, cost FROM ROUTES WHERE address = ?", (url,)).fetchone()
-    if row is None:
+        return
+    route = Route.query.get(url)
+    if route is None:
         # If we don't know how to get there, let channel try.
         # As set up currently, this shouldn't ever work, but
         # we can let channel throw the error
         channel.send(url, amount)
     else:
         # Send the next hop money over our payment channel
-        next_hop, cost = row
-        channel.send(next_hop, amount + cost)
+        channel.send(route.next_hop, amount + route.cost)
         # Ask the next hop to send money to the destination
-        bob = jsonrpcproxy.Proxy(next_hop+'lightning/')
+        bob = jsonrpcproxy.Proxy(route.next_hop+'lightning/')
         bob.send(url, amount)
-    return True

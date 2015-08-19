@@ -8,7 +8,7 @@ All requests require authentication.
 from serverutil import api_factory, authenticate_before_request
 import channel, lightning
 
-API, REMOTE = api_factory('local')
+API, REMOTE, Model = api_factory('local')
 
 REMOTE(channel.create)
 REMOTE(lightning.send)

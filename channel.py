@@ -43,7 +43,7 @@ from bitcoin.wallet import CBitcoinAddress
 import jsonrpcproxy
 from serverutil import api_factory, requires_auth
 
-API, REMOTE = api_factory('channel')
+API, REMOTE, Model = api_factory('channel')
 
 SIGNALS = Namespace()
 CHANNEL_OPENED = SIGNALS.signal('CHANNEL_OPENED')
