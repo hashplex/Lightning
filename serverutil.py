@@ -15,11 +15,16 @@ BLOCK_NOTIFY: send when bitcoind tells us it has a block
 - block = block hash
 """
 
+import os.path
 from functools import wraps
-from flask import current_app, Response, request, Blueprint
+from flask import Flask, g, current_app, Response, request, Blueprint
+from flask.ext.sqlalchemy import SQLAlchemy # pylint: disable=no-name-in-module, import-error
 from blinker import Namespace
 from jsonrpc.backend.flask import JSONRPCAPI
 from jsonrpcproxy import SmartDispatcher
+
+app = Flask(__name__) # pylint: disable=invalid-name
+database = SQLAlchemy(app)
 
 SIGNALS = Namespace()
 WALLET_NOTIFY = SIGNALS.signal('WALLET_NOTIFY')
@@ -66,6 +71,19 @@ def api_factory(name):
     RPC calls are availiable at the url /name/
     """
     api = Blueprint(name, __name__, url_prefix='/'+name)
+    def setup_bind(state):
+        """Add the database to the config."""
+        database_path = os.path.join(state.app.config['datadir'], name + '.dat')
+        state.app.config['SQLALCHEMY_BINDS'][name] = 'sqlite:///' + database_path
+    api.record_once(setup_bind)
+    def initialize_database():
+        """Create the database."""
+        database.create_all(name)
+    api.before_app_first_request(initialize_database)
+    class BoundModel(database.Model):
+        __abstract__ = True
+    BoundModel.__bind_key__ = name
+
     rpc_api = JSONRPCAPI(SmartDispatcher())
     assert type(rpc_api.dispatcher == SmartDispatcher)
     api.add_url_rule('/', 'rpc', rpc_api.as_view(), methods=['POST'])

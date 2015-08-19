@@ -22,16 +22,15 @@ import os
 import os.path
 import json
 import hashlib
-from flask import Flask, request, current_app, g
+from flask import request, current_app, g
 import bitcoin.rpc
 from bitcoin.wallet import CBitcoinSecret
+from serverutil import app
 from serverutil import requires_auth
 from serverutil import WALLET_NOTIFY, BLOCK_NOTIFY
 import channel
 import lightning
 import local
-
-app = Flask(__name__) # pylint: disable=invalid-name
 
 @app.before_request
 def before_request():
@@ -42,10 +41,6 @@ def before_request():
     g.seckey = CBitcoinSecret.from_secret_bytes(secret)
     g.addr = 'http://localhost:%d/' % int(g.config['port'])
     g.logger = current_app.logger
-
-app.register_blueprint(channel.API)
-app.register_blueprint(lightning.API)
-app.register_blueprint(local.API)
 
 @app.route('/error')
 @requires_auth
@@ -108,6 +103,11 @@ if __name__ == '__main__':
     app.config['bitcoind'] = bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' %
                                                (conf['bituser'], conf['bitpass'],
                                                 int(conf['bitport'])))
+    app.config['SQLALCHEMY_BINDS'] = {}
+    app.register_blueprint(channel.API)
+    app.register_blueprint(lightning.API)
+    app.register_blueprint(local.API)
+
     channel.init(app.config)
     lightning.init(app.config)
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False,
