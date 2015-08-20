@@ -51,7 +51,7 @@ def on_open(dummy_sender, address, **dummy_args):
     """Routing update on open."""
     fees = 10000
     # Add the new peer
-    peer = Peer(address, fees)
+    peer = Peer(address=address, fees=fees)
     database.session.add(peer)
     # Broadcast a routing update
     update(address, address, 0)
@@ -71,7 +71,7 @@ def update(next_hop, address, cost):
         return
     route = Route.query.get(address)
     if route is None:
-        route = Route(address, cost, next_hop)
+        route = Route(address=address, cost=cost, next_hop=next_hop)
         database.session.add(route)
     elif route.cost <= cost:
         return
