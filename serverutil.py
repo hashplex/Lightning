@@ -17,13 +17,13 @@ BLOCK_NOTIFY: send when bitcoind tells us it has a block
 
 import os.path
 from functools import wraps
-from flask import Flask, g, current_app, Response, request, Blueprint
-from flask.ext.sqlalchemy import SQLAlchemy # pylint: disable=no-name-in-module, import-error
+from flask import Flask, current_app, Response, request, Blueprint
+from flask_sqlalchemy import SQLAlchemy
 from blinker import Namespace
 from jsonrpc.backend.flask import JSONRPCAPI
 from jsonrpcproxy import SmartDispatcher
 
-app = Flask(__name__) # pylint: disable=invalid-name
+app = Flask(__name__)
 database = SQLAlchemy(app)
 
 SIGNALS = Namespace()
@@ -81,14 +81,15 @@ def api_factory(name):
         database.create_all(name)
     api.before_app_first_request(initialize_database)
     class BoundMeta(type(database.Model)):
+        """Metaclass for Model which allows __abstract__ base classes."""
         def __init__(self, cls_name, bases, attrs):
             assert '__bind_key__' not in attrs
             if not attrs.get('__abstract__', False):
                 attrs['__bind_key__'] = name
-            type(database.Model).__init__(self, cls_name, bases, attrs)
-    class BoundModel(database.Model, metaclass=BoundMeta):
+            super(BoundMeta, self).__init__(cls_name, bases, attrs)
+    class BoundModel(database.Model, metaclass=BoundMeta): # pylint: disable=no-init
+        """Base class for models which have __bind_key__ set automatically."""
         __abstract__ = True
-
     rpc_api = JSONRPCAPI(SmartDispatcher())
     assert type(rpc_api.dispatcher == SmartDispatcher)
     api.add_url_rule('/', 'rpc', rpc_api.as_view(), methods=['POST'])

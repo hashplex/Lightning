@@ -14,8 +14,6 @@ Check balances:
 Read test.py for more example usage.
 """
 
-# pylint: disable=invalid-name
-
 import test.regnet as regnet
 NET = regnet.create(datadir=None)
 NET.generate(101)

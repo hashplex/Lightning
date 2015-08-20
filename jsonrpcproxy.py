@@ -124,7 +124,9 @@ def from_json(message):
     raise ConversionError("Unable to convert", message)
 
 def convert_exception(exception):
+    """Convert an exception's arguments to jsonizable form."""
     def force_convert(value):
+        """Try to convert reversibly, otherwise cast to string."""
         try:
             return to_json(value)
         except ConversionError:
@@ -158,7 +160,7 @@ class JSONResponseException(Exception):
 class JSONRPCError(Exception):
     """Error making RPC call"""
 
-class Proxy(object): # pylint: disable=too-few-public-methods
+class Proxy(object):
     """Remote method call proxy."""
 
     def __init__(self, url):
@@ -201,7 +203,7 @@ class Proxy(object): # pylint: disable=too-few-public-methods
         func.__name__ = name
         return func
 
-class AuthProxy(Proxy): # pylint: disable=too-few-public-methods
+class AuthProxy(Proxy):
     """Proxy with basic authentication."""
     def __init__(self, url, auth):
         Proxy.__init__(self, url)

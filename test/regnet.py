@@ -368,7 +368,7 @@ class RegtestNetwork(object):
         def __exit__(self, dummy_type, dummy_value, dummy_traceback):
             self.cleanup()
 
-    def __init__(self, Node=BitcoinNode, degree=3, datadir=None, cache=None):
+    def __init__(self, Node, degree=3, datadir=None, cache=None):
         if datadir is None:
             self.datadir = tempfile.mkdtemp()
         else:

@@ -358,7 +358,7 @@ def get_address():
     return str(g.bit.getnewaddress())
 
 @REMOTE
-def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, their_pubkey, their_out_addr): # pylint: disable=too-many-arguments
+def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, their_pubkey, their_out_addr): # pylint: disable=too-many-arguments, line-too-long
     """Open a payment channel."""
     # Get inputs and change output
     coins, change = select_coins(mymoney + 2 * fees)

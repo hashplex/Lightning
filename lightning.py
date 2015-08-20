@@ -21,11 +21,9 @@ cost: total fees to route payment to that node
 nexthop: where should payment go next on the path to that node
 """
 
-import os.path
-import sqlite3
 from flask import g
 import jsonrpcproxy
-from serverutil import api_factory, requires_auth, database
+from serverutil import api_factory, database
 import channel
 from sqlalchemy import Column, Integer, String
 
