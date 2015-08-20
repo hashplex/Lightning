@@ -87,9 +87,11 @@ def api_factory(name):
             if not attrs.get('__abstract__', False):
                 attrs['__bind_key__'] = name
             super(BoundMeta, self).__init__(cls_name, bases, attrs)
-    class BoundModel(database.Model, metaclass=BoundMeta): # pylint: disable=no-init
+    class BoundModel(database.Model, metaclass=BoundMeta):
         """Base class for models which have __bind_key__ set automatically."""
         __abstract__ = True
+        def __init__(self, *args, **kwargs):
+            super(BoundModel, self).__init__(*args, **kwargs)
     rpc_api = JSONRPCAPI(SmartDispatcher())
     assert type(rpc_api.dispatcher == SmartDispatcher)
     api.add_url_rule('/', 'rpc', rpc_api.as_view(), methods=['POST'])

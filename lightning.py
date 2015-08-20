@@ -37,10 +37,6 @@ class Peer(Model):
     address = Column(String, primary_key=True)
     fees = Column(Integer)
 
-    def __init__(self, address, fees):
-        self.address = address
-        self.fees = fees
-
 class Route(Model):
     """Database model of a route."""
 
@@ -49,11 +45,6 @@ class Route(Model):
     address = Column(String, primary_key=True)
     cost = Column(Integer)
     next_hop = Column(String)
-
-    def __init__(self, address, cost, next_hop):
-        self.address = address
-        self.cost = cost
-        self.next_hop = next_hop
 
 @channel.CHANNEL_OPENED.connect_via('channel')
 def on_open(dummy_sender, address, **dummy_args):
