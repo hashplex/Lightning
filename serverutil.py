@@ -90,6 +90,7 @@ def api_factory(name):
     class BoundModel(database.Model, metaclass=BoundMeta):
         """Base class for models which have __bind_key__ set automatically."""
         __abstract__ = True
+        query = object.__getattribute__(database.Model, 'query')
         def __init__(self, *args, **kwargs):
             super(BoundModel, self).__init__(*args, **kwargs)
     rpc_api = JSONRPCAPI(SmartDispatcher())
