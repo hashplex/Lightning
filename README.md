@@ -28,7 +28,7 @@ This is an implementation of a Lightning node. Its goal is to foster experimenta
 `test/test_integration.py` is where I recommend you start reading, specifically `TestChannel.test_basic` and `TestLightning.test_payment`. It demonstrates intended usage of the project.
 
 Directory:
-- The server is split across `lightningd.py`, `lightningserver.py`, and `serverutil.py`.
+- The server is split across `lightningd.py` and `serverutil.py`.
 - The micropayment channel protocol is implemented in `channel.py`.
 - The routing protocol is implemented in `lightning.py`.
 
@@ -50,11 +50,10 @@ Design
 
 The lightning node is split into 4 pieces: the server, micropayment channels, and lightning routing, and the user interface.
 
-The server is responsible for talking to the user and to other nodes. It is currently split across 3 files, `lightningd.py`, `lightningserver.py`, and `serverutil.py`.
+The server is responsible for talking to the user and to other nodes. It is currently split across 2 files, `lightningd.py` and `serverutil.py`.
 
-1. `lightningd.py` is responsible for parsing the config and handling daemonization.
-2. `lightningserver` is the body of the server, it sets up a Flask app and installs the channel interface, lightning interface, and user interface. The Flask dev server is used, configured to run with multiple processes.
-3. `serverutil.py` This is how the channel, lightning and user interfaces talk with the server. It contains authentication helpers as well as `api_factory`, which provides an API Blueprint object to attach before and after request hooks, and also a decorator which exposes functions to the RPC interface. JSON-RPC is currently used both for inter-node communication as well as user interaction, since JSON-RPC was easy and flexible to implement.
+1. `lightningd.py` is the body of the server, it sets up a Flask app and installs the channel interface, lightning interface, and user interface. The Flask dev server is used, configured to run with multiple processes.
+2. `serverutil.py` is how the channel, lightning and user interfaces talk with the server. It contains authentication helpers as well as `api_factory`, which provides an API Blueprint object to attach before and after request hooks, and also a decorator which exposes functions to the RPC interface. JSON-RPC is currently used both for inter-node communication as well as user interaction, since JSON-RPC was easy and flexible to implement.
 
 Micropayment channel functionality resides in `channel.py`. It contains functions to open, update, and close channels. Communication is accomplished by RPC calls to other nodes. This module currently sets up its own sqlite database, but this should really be moved to the server. Channels are not currently secure or robust. A 2 of 2 multisig anchor is set up by mutual agreement. During operation and closing, commitment signatures are exchanged, which provides support for unilateral close. There is no support for revoking commitment transactions yet. There is also no support for HTLCs yet. Rusty has developed a secure protocol, and I am working on implementing it.
 

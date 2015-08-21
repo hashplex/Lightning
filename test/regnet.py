@@ -114,8 +114,7 @@ class BitcoinNode(object):
         self.stop(hard=False, cleanup=False)
         yield
         self.start()
-        while not self.is_alive():
-            time.sleep(0.1)
+        self.wait_alive()
 
     def print_log(self):
         """Print the log file."""
@@ -163,6 +162,14 @@ class BitcoinNode(object):
         # Reinitialize proxy
         self.proxy = bitcoin.rpc.Proxy('http://rt:rt@localhost:%d' % self.rpc_port)
         return False
+
+    def wait_alive(self):
+        """Wait for the node to become alive."""
+        while not self.is_alive():
+            if self.process.poll() is not None:
+                self.print_log()
+                raise Exception("Process terminated")
+            time.sleep(0.1)
 
     def add_notify(self, command):
         """Add a command to be executed on block or wallet notify."""
@@ -233,6 +240,7 @@ class LightningNode(object):
         self.stop(cleanup=False)
         yield
         self.start()
+        self.wait_alive()
 
     def print_log(self):
         """Print the log file."""
@@ -250,6 +258,14 @@ class LightningNode(object):
             'http://localhost:%d/local/' % self.port,
             ('rt', 'rt'))
         return False
+
+    def wait_alive(self):
+        """Wait for the node to become alive."""
+        while not self.is_alive():
+            if self.process.poll() is not None:
+                self.print_log()
+                raise Exception("Process terminated")
+            time.sleep(0.1)
 
 class FullNode(object):
     """Combined Lightning and Bitcoin node."""
@@ -300,8 +316,7 @@ class FullNode(object):
         self.stop(hard=False, cleanup=False)
         yield
         self.start()
-        while not self.is_alive():
-            time.sleep(0.1)
+        self.wait_alive()
 
     def print_log(self, bit=True, lit=True):
         """Print logs."""
@@ -326,6 +341,11 @@ class FullNode(object):
         """Test if the node is alive."""
         return self.bitcoin.is_alive() and self.lightning.is_alive()
 
+    def wait_alive(self):
+        """Wait for the node to be alive."""
+        self.bitcoin.wait_alive()
+        self.lightning.wait_alive()
+
 class RegtestNetwork(object):
     """Regtest network."""
 
@@ -348,7 +368,7 @@ class RegtestNetwork(object):
         def __exit__(self, dummy_type, dummy_value, dummy_traceback):
             self.cleanup()
 
-    def __init__(self, Node=BitcoinNode, degree=3, datadir=None, cache=None):
+    def __init__(self, Node, degree=3, datadir=None, cache=None):
         if datadir is None:
             self.datadir = tempfile.mkdtemp()
         else:
@@ -361,8 +381,9 @@ class RegtestNetwork(object):
         self.nodes = [Node(os.path.join(self.datadir, 'node%d' % i),
                            cache=node_cache, peers=[self.miner,])
                       for i, node_cache in zip(range(degree), cache.node_caches)]
-        while not (all(node.is_alive() for node in self.nodes) and self.miner.is_alive()):
-            time.sleep(0.1)
+        self.miner.wait_alive()
+        for node in self.nodes:
+            node.wait_alive()
         # sync nodes
         self.generate()
 
