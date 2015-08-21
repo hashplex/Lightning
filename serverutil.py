@@ -20,8 +20,11 @@ import os.path
 from functools import wraps
 from flask import Flask, current_app, Response, request, Blueprint
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.types import TypeDecorator
 from blinker import Namespace
+from sqlalchemy import LargeBinary, Text
 from jsonrpc.backend.flask import JSONRPCAPI
+import bitcoin.core.serialize
 from jsonrpcproxy import SmartDispatcher
 
 app = Flask(__name__)
@@ -105,3 +108,56 @@ def api_factory(name):
     api.add_url_rule('/', 'rpc', rpc_api.as_view(), methods=['POST'])
 
     return api, rpc_api.dispatcher.add_method, BoundModel
+
+class ImmutableSerializableType(TypeDecorator):
+    """Converts bitcoin-lib ImmutableSerializable instances for the DB."""
+
+    impl = LargeBinary
+
+    def __init__(self, subtype=bitcoin.core.serialize.ImmutableSerializable):
+        self.subtype = subtype
+        super(ImmutableSerializableType, self).__init__()
+
+    @property
+    def python_type(self):
+        return self.subtype
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            value = value.serialize()
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = self.subtype.deserialize(value)
+        return value
+
+    def process_literal_param(self, value, dialect):
+        raise NotImplementedError()
+
+
+class Base58DataType(TypeDecorator):
+    """Converts bitcoin-lib Base58Data instances for the DB."""
+
+    impl = Text
+
+    def __init__(self, subtype=bitcoin.base58.CBase58Data):
+        self.subtype = subtype
+        super(Base58DataType, self).__init__()
+
+    @property
+    def python_type(self):
+        return self.subtype
+
+    def process_bind_param(self, value, dummy_dialect):
+        if value is not None:
+            value = str(value)
+        return value
+
+    def process_result_value(self, value, dummy_dialect):
+        if value is not None:
+            value = self.subtype(value)
+        return value
+
+    def process_literal_param(self, value, dialect):
+        raise NotImplementedError()
