@@ -1,17 +1,23 @@
 """Local (private) API for a lightning node.
-
 Currently this just collects and exposes methods in channel and lightning.
 A HTML GUI could also be provided here in the future.
 All requests require authentication.
 """
 
-from serverutil import api_factory, authenticate_before_request
-import channel, lightning
+from flask import Blueprint
+from jsonrpc.backend.flask import JSONRPCAPI
+from serverutil import authenticate_before_request
+from jsonrpcproxy import SmartDispatcher
+import channel
 
-API, REMOTE, Model = api_factory('local')
+API = Blueprint('local', __name__, url_prefix='/local')
+rpc_api = JSONRPCAPI(SmartDispatcher())
+assert type(rpc_api.dispatcher == SmartDispatcher)
+API.add_url_rule('/', 'rpc', rpc_api.as_view(), methods=['POST'])
+REMOTE = rpc_api.dispatcher.add_method
 
 REMOTE(channel.create)
-REMOTE(lightning.send)
+REMOTE(channel.send)
 REMOTE(channel.close)
 REMOTE(channel.getbalance)
 REMOTE(channel.getcommitmenttransactions)

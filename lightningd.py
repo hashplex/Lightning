@@ -97,15 +97,15 @@ if __name__ == '__main__':
     else:
         raise Exception("Non-regnet use not supported")
 
+    app.config.update(conf)
+
     port = conf.getint('port')
     app.config['secret'] = b'correct horse battery staple' + bytes(str(port), 'utf8')
-    app.config.update(conf)
-    app.config['bitcoind'] = bitcoin.rpc.Proxy('http://%s:%s@localhost:%d' %
-                                               (conf['bituser'], conf['bitpass'],
-                                                int(conf['bitport'])))
-    app.config['SQLALCHEMY_BINDS'] = {}
+    app.config['bitcoind_address'] = ('http://%s:%s@localhost:%d' %
+                                      (conf['bituser'], conf['bitpass'],
+                                       int(conf['bitport'])))
+    app.config['bitcoind'] = bitcoin.rpc.Proxy(app.config['bitcoind_address'])
     app.register_blueprint(channel.API)
-    app.register_blueprint(lightning.API)
     app.register_blueprint(local.API)
 
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False,
