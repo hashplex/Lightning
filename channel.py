@@ -194,15 +194,15 @@ def create(url, mymoney, theirmoney, fees=10000):
     setup and teardown of the channel should be collected at this time.
     """
     bob = jsonrpcproxy.Proxy(url+'channel/')
-    print ("bob: " + url + "channel/")
+    # print ("bob: " + url + "channel/")
     # Choose inputs and change output
     coins, change = select_coins(mymoney + 2 * fees)
-    print ("coins: " + coins + ", change: ") 
+    # print ("coins: " + coins + ", change: ") 
     pubkey = get_pubkey()
-    print ("pubkey: " + pubkey)
+    # print ("pubkey: " + pubkey)
     my_out_addr = g.bit.getnewaddress()
-    print ("my out (bitcoin adddress for money when we close the channel) addr: " + my_out_addr)
-    print ("g.addr (our lightning address: " + g.addr )
+    # print ("my out (bitcoin adddress for money when we close the channel) addr: " + my_out_addr)
+    # print ("g.addr (our lightning address: " + g.addr )
     # Tell Bob we want to open a channel
     transaction, redeem, their_out_addr = bob.open_channel(
         g.addr, theirmoney, mymoney, fees,
