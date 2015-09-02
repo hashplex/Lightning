@@ -338,7 +338,7 @@ def open_channel(address, my_money, their_money, fees, their_coins, their_change
                       their_sig=b'',
                       anchor_redeem=anchor_output_script,
                       our_balance=my_money,
-                      our_addr=our_addr,
+                      our_addr=our_btc_addr,
                       their_balance=their_money,
                       their_addr=their_out_addr,
                      )
