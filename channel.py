@@ -18,6 +18,8 @@ from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
 from bitcoin.core.script import OP_CHECKMULTISIG, OP_PUBKEY
 from bitcoin.wallet import CBitcoinAddress, CBitcoinSecret
+from bitcoin.base58 import CBase58Data
+CBase58Data.__getnewargs__ = lambda self: (str(self),) # Support pickle
 import bitcoin.rpc
 import jsonrpcproxy
 
@@ -142,7 +144,6 @@ class Channel(object):
         transaction = CMutableTransaction([self.anchor], [self.their, self.our])
         transaction = CMutableTransaction.from_tx(transaction) # copy
         # convert scripts to CScript
-        transaction.vin[0].scriptSig = transaction.vin[0].scriptSig.to_script()
         for tx_out in transaction.vout:
             tx_out.scriptPubKey = tx_out.scriptPubKey.to_scriptPubKey()
         # sign
@@ -205,7 +206,7 @@ class Channel(object):
         # Event: channel opened
         channel_opened.send(self.cmd_id, address=self.address)
         self.bob.open_accept(transaction, anchor_output_script, self.our.scriptPubKey)
-        self.state = 'open_wait_anchor_1.5'
+        self.state = 'open_wait_1.5'
 
     @table.add('pkt_open_accept')
     def open_accept(self, transaction, redeem, their_addr):
@@ -215,9 +216,9 @@ class Channel(object):
         assert transaction['complete']
         transaction = transaction['tx']
         self.bitcoind.sendrawtransaction(transaction)
-        self.bob.update_anchor(transaction.GetHash(), self.sig_for_them())
         self.their.scriptPubKey = their_addr
         self.anchor.scriptSig = AnchorScriptSig(1, b'', redeem)
+        self.bob.update_anchor(transaction.GetHash(), self.sig_for_them())
         self.state = 'open_wait_2'
 
     @table.add('pkt_update_anchor')
@@ -277,7 +278,7 @@ def set_up():
         try:
             task_handler(database, bitcoind, local_address)
         except BaseException:
-            task_error.send('taks_handler')
+            task_error.send('task_handler')
             raise
     task_thread = threading.Thread(target=run, daemon=True)
     task_thread.start()
@@ -322,14 +323,25 @@ def create(address, my_money, their_money):
         complete_event.set()
     cmd_complete.connect(complete, sender=cmd_id)
     task_error.connect(complete)
-    tasks.put((address, ('cmd_open', (get_uid(), my_money, their_money), {})))
+    tasks.put((address, ('cmd_open', (cmd_id, my_money, their_money), {})))
     complete_event.wait()
     if not current_app.config['channel_task_thread'].is_alive():
         raise Exception("Error creating channel")
 
 def send(address, amount):
     """Send money."""
-    tasks.put((address, ('cmd_send', (get_uid(), amount,), {})))
+    logger.debug("Create %s %d %d", address, my_money, their_money)
+    cmd_id = get_uid()
+    complete_event = threading.Event()
+    def complete(dummy_id, **dummy_args):
+        """Unblock."""
+        complete_event.set()
+    cmd_complete.connect(complete, sender=cmd_id)
+    task_error.connect(complete)
+    tasks.put((address, ('cmd_send', (cmd_id, amount), {})))
+    complete_event.wait()
+    if not current_app.config['channel_task_thread'].is_alive():
+        raise Exception("Error creating channel")
 
 def close(address):
     """Close the channel."""
@@ -338,11 +350,13 @@ def close(address):
 def getbalance(address):
     """Get a balance."""
     database = current_app.config['channel_database']
-    channel = pickle.loads(database.Get(address))
+    key = address.encode('utf-8')
+    channel = pickle.loads(database.Get(key))
     return channel.our.nValue
 
 def getcommitmenttransactions(address):
     """Get the list of commitment transactions."""
     database = current_app.config['channel_database']
-    channel = pickle.loads(database.Get(address))
+    key = address.encode('utf-8')
+    channel = pickle.loads(database.Get(key))
     return []
