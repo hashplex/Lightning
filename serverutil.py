@@ -24,7 +24,7 @@ from jsonrpc.backend.flask import JSONRPCAPI
 import bitcoin.core.serialize
 from jsonrpcproxy import SmartDispatcher
 
-app = Flask(__name__)
+app = Flask('lightningd')
 
 SIGNALS = Namespace()
 WALLET_NOTIFY = SIGNALS.signal('WALLET_NOTIFY')

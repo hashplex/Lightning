@@ -2,20 +2,18 @@
 
 """Parse configuration and start the server.
 
-When run with -daemon, daemonize the process first.
-
 Usage:
--daemon: daemonize (Default False)
--debug: use the debug server (Currently conflicts with daemon)
+-debug: use the debug server
 -datadir=<path>: specify the directory to run in
 -conf=<file>: specify the configuration file (default lightning.conf)
 -port=<port>: specify the port to bind to
 
 Options except for datadir and conf can be specified in the configuration file.
 Command line options take precedence over configuration file options.
-Flag options can be turned off by prefixing with 'no' (Ex: -nodaemon).
+Flag options can be turned off by prefixing with 'no' (Ex: -nodebug).
 """
 
+import logging
 import argparse
 import config
 import os
@@ -32,16 +30,6 @@ import channel
 import lightning
 import local
 
-@app.before_request
-def before_request():
-    """Setup g context"""
-    g.config = current_app.config
-    g.bit = g.config['bitcoind']
-    secret = hashlib.sha256(g.config['secret']).digest()
-    g.seckey = CBitcoinSecret.from_secret_bytes(secret)
-    g.addr = 'http://localhost:%d/' % int(g.config['port'])
-    g.logger = current_app.logger
-
 @app.route('/error')
 @requires_auth
 def error():
@@ -51,6 +39,7 @@ def error():
 @app.route("/get-ip")
 def get_my_ip():
     """Return remote_addr."""
+    current_app.logger.debug("GET_IP")
     return json.dumps({'ip': request.remote_addr}), 200
 
 @app.route('/info')
@@ -98,9 +87,10 @@ if __name__ == '__main__':
         raise Exception("Non-regnet use not supported")
 
     app.config.update(conf)
+    app.debug = conf.getboolean('debug')
+    app.logger.setLevel(app.logger.getEffectiveLevel())
 
     port = conf.getint('port')
-    app.config['secret'] = b'correct horse battery staple' + bytes(str(port), 'utf8')
     app.config['bitcoind_address'] = ('http://%s:%s@localhost:%d' %
                                       (conf['bituser'], conf['bitpass'],
                                        int(conf['bitport'])))
@@ -108,5 +98,4 @@ if __name__ == '__main__':
     app.register_blueprint(channel.API)
     app.register_blueprint(local.API)
 
-    app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False,
-            processes=3)
+    app.run(port=port, debug=True, use_reloader=False, threaded=True)

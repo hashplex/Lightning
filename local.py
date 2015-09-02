@@ -4,7 +4,7 @@ A HTML GUI could also be provided here in the future.
 All requests require authentication.
 """
 
-from flask import Blueprint
+from flask import Blueprint, current_app
 from jsonrpc.backend.flask import JSONRPCAPI
 from serverutil import authenticate_before_request
 from jsonrpcproxy import SmartDispatcher
@@ -25,6 +25,7 @@ REMOTE(channel.getcommitmenttransactions)
 @REMOTE
 def alive():
     """Test if the server is ready to handle requests."""
+    current_app.logger.debug("Alive")
     return True
 
 API.before_request(authenticate_before_request)

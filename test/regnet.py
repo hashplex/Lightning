@@ -126,7 +126,7 @@ class BitcoinNode(object):
 
         This should be called after stopping the node.
         """
-        cache_dir = tempfile.TemporaryDirectory()
+        cache_dir = tempfile.TemporaryDirectory(suffix='cache')
         restore_dir = os.path.join(self.datadir, 'regtest')
         for cached_file in self.CACHE_FILES:
             shutil.copy(os.path.join(restore_dir, cached_file),
@@ -195,6 +195,7 @@ class LightningNode(object):
 
         with open(os.path.join(self.datadir, 'lightning.conf'), 'w') as conf:
             conf.write("regtest=1\n")
+            conf.write("debug=1\n")
             conf.write("rpcuser=rt\n")
             conf.write("rpcpassword=rt\n")
             conf.write("port=%d\n" % self.port)
@@ -210,7 +211,7 @@ class LightningNode(object):
         self.logfile = open(os.path.join(self.datadir, 'lightning.log'), 'w')
         self.process = subprocess.Popen(
             [
-                LIGHTNINGD, '-datadir=%s' % self.datadir, '-nodebug'
+                LIGHTNINGD, '-datadir=%s' % self.datadir,
             ],
             stdin=subprocess.DEVNULL,
             stdout=self.logfile,

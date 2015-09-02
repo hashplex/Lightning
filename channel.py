@@ -1,5 +1,6 @@
 """Micropayment channel API"""
 
+import logging
 import os.path
 import pickle
 import collections
@@ -20,8 +21,12 @@ from bitcoin.wallet import CBitcoinAddress, CBitcoinSecret
 import bitcoin.rpc
 import jsonrpcproxy
 
+logger = logging.getLogger('lightningd.channel')
+
 signals = Namespace()
 channel_opened = signals.signal("channel_opened")
+cmd_complete = signals.signal("cmd_complete")
+task_error = signals.signal("task_error")
 
 tasks = queue.Queue()
 
@@ -61,6 +66,20 @@ class AnchorScriptSig(object):
             raise Exception("Unknown index", self.my_index)
         return CScript([0, sig1, sig2, self.redeem])
 
+class AddressedProxy(jsonrpcproxy.Proxy):
+    """Call all methods with our address as the first argument."""
+
+    def __init__(self, our_url, their_url):
+        self.our_url = our_url
+        super(AddressedProxy, self).__init__(their_url)
+
+    def _call(self, name, *args, **kwargs):
+        our_url = object.__getattribute__(self, 'our_url')
+        if kwargs:
+            super(AddressedProxy, self)._call(name, *args, address=our_url, **kwargs)
+        else:
+            super(AddressedProxy, self)._call(name, our_url, *args, **kwargs)
+
 class FunctionTable(dict):
     """Map keys to functions with decorator syntax."""
 
@@ -78,6 +97,7 @@ class Channel(object):
     table = FunctionTable()
     private_key = None
     bitcoind = None
+    local_address = None
 
     def __init__(self, address):
         self.address = address
@@ -115,7 +135,7 @@ class Channel(object):
     @property
     def bob(self):
         """Proxy to counterpary."""
-        return jsonrpcproxy.Proxy(self.address+'channel/')
+        return AddressedProxy(self.local_address, self.address+'channel/')
 
     def sig_for_them(self):
         """Generate a signature for the mirror commitment transaction."""
@@ -133,10 +153,10 @@ class Channel(object):
     def handle(self, task):
         """Handle one task (input event for the state machine)."""
         name, args, kwargs = task
-        self.table[name](*args, **kwargs)
+        self.table[name](self, *args, **kwargs)
         while self.state == 'normal' and self.deferred:
             name, args, kwargs = self.deferred.popleft()
-            self.table[name](*args, **kwargs)
+            self.table[name](self, *args, **kwargs)
 
     def defer(self, task):
         """Record a task to be done when back in normal state."""
@@ -215,34 +235,53 @@ class Channel(object):
         assert self.state == 'open_wait_2'
         self.anchor.scriptSig.sig = sig
         channel_opened.send(self.cmd_id)
+        cmd_complete.send(self.cmd_id)
+        self.cmd_id = None
         self.state = 'normal'
 
-def task_handler(database, bitcoind_address):
+def task_handler(database, bitcoind_address, local_address):
     """Task handler thread main function."""
+    logger.debug("Starting task handler.")
+    logger.debug("bitcoind address: %s", bitcoind_address)
     Channel.bitcoind = bitcoin.rpc.Proxy(bitcoind_address)
+    Channel.local_address = local_address
     try:
         root_key = database.Get(b'root_key')
     except KeyError:
-         # TODO: grab a real private key from bitcoind
-        root_key = CBitcoinSecret.from_secret_bytes(bitcoind_address)
+        # TODO: grab a real private key from bitcoind
+        root_key = CBitcoinSecret.from_secret_bytes(bytes(bitcoind_address, 'ascii'))
         database.Put(b'root_key', root_key)
     Channel.private_key = root_key
     while True:
         address, task = tasks.get()
+        key = address.encode('utf-8')
+        logger.debug("Task for %s: %r", address, task)
         try:
-            channel = pickle.loads(database.Get(address))
+            channel = pickle.loads(database.Get(key))
         except KeyError:
             channel = Channel(address)
         channel.handle(task)
-        database.Put(address, pickle.dumps(channel))
+        database.Put(key, pickle.dumps(channel))
 
 API = Blueprint('channel', __name__, url_prefix='/channel')
 @API.before_app_first_request
 def set_up():
     """Start task_handler thread."""
+    logger.debug("Call set_up")
     database = current_app.config['channel_database']
     bitcoind = current_app.config['bitcoind_address']
-    threading.Thread(target=lambda: task_handler(database, bitcoind), daemon=True)
+    port = int(current_app.config['port'])
+    local_address = 'http://localhost:%d/' % port
+    def run():
+        """Run the task_handler."""
+        try:
+            task_handler(database, bitcoind, local_address)
+        except BaseException:
+            task_error.send('taks_handler')
+            raise
+    task_thread = threading.Thread(target=run, daemon=True)
+    task_thread.start()
+    current_app.config['channel_task_thread'] = task_thread
 @API.record_once
 def on_register(state):
     """Create the database."""
@@ -255,6 +294,9 @@ class QueueDispatcher(object):
     def __getitem__(self, key):
         def queue_dispatched(address, *args, **kwargs):
             """Put a task in the queue."""
+            args = jsonrpcproxy.from_json(args)
+            kwargs = jsonrpcproxy.from_json(kwargs)
+            logger.debug("Queue pkt_%s from %s", key, address)
             tasks.put((address, ('pkt_'+key, args, kwargs)))
             return True
         return queue_dispatched
@@ -272,7 +314,18 @@ def get_uid():
 
 def create(address, my_money, their_money):
     """Create a payment channel."""
+    logger.debug("Create %s %d %d", address, my_money, their_money)
+    cmd_id = get_uid()
+    complete_event = threading.Event()
+    def complete(dummy_id, **dummy_args):
+        """Unblock."""
+        complete_event.set()
+    cmd_complete.connect(complete, sender=cmd_id)
+    task_error.connect(complete)
     tasks.put((address, ('cmd_open', (get_uid(), my_money, their_money), {})))
+    complete_event.wait()
+    if not current_app.config['channel_task_thread'].is_alive():
+        raise Exception("Error creating channel")
 
 def send(address, amount):
     """Send money."""
