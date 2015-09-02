@@ -8,9 +8,9 @@ Arguments:
 - address -- the url of the counterparty
 
 init(conf) - Set up the database
-create(url, mymoney, theirmoney)
+create(url, my_money, their_money)
 - Open a channel with the node identified by url,
-  where you can send mymoney satoshis, and recieve theirmoney satoshis.
+  where you can send my_money satoshis, and recieve their_money satoshis.
 send(url, amount)
 - Update a channel by sending amount satoshis to the node at url.
 getbalance(url)
@@ -106,7 +106,15 @@ class Channel(Model):
         """Signature for a transaction."""
         sighash = SignatureHash(CScript(self.anchor_redeem),
                                 transaction, 0, SIGHASH_ALL)
-        sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
+        g.logger.debug("### signature.sighash: \n" + str(sighash) )
+
+        sig = g.seckey.sign(sighash)                                     
+        g.logger.debug("### signature.SIGHASH_ALL: " + str(SIGHASH_ALL) )
+        g.logger.debug("### signature.bytes([SIGHASH_ALL]): \n" + str(bytes([SIGHASH_ALL])) )
+        g.logger.debug("### signature.g.seckey.sign(sighash): \n" + str(sig) )
+
+        sig = sig + bytes([SIGHASH_ALL])
+        g.logger.debug("### signature.sig: \n" + str(sig) )
         return sig
 
     def sign(self, transaction):
@@ -147,7 +155,7 @@ class Channel(Model):
         return CMutableTransaction([CMutableTxIn(self.anchor_point)],
                                    [first, second])
 
-def select_coins(amount):
+def select_outputs(amount):
     """Get a txin set and change to spend amount."""
     coins = g.bit.listunspent()
     out = []
@@ -185,55 +193,76 @@ def update_db(address, amount, sig):
     database.session.commit()
     return channel.signature(channel.commitment()) # this is our signature of the comittment 
 
-def create(url, mymoney, theirmoney, fees=10000):
+# def verify_sig()
+
+def create(theirUrl, my_money, their_money, fees=10000):
     """Open a payment channel.
 
     After this method returns, a payment channel will have been established
-    with the node identified by url, in which you can send mymoney satoshis
-    and recieve theirmoney satoshis. Any blockchain fees involved in the
+    with the node identified by theirUrl, in which you can send my_money satoshis
+    and recieve their_money satoshis. Any blockchain fees involved in the
     setup and teardown of the channel should be collected at this time.
     """
-    bob = jsonrpcproxy.Proxy(url+'channel/')
-    # print ("bob: " + url + "channel/")
+    bob = jsonrpcproxy.Proxy(theirUrl+'channel/')
+    g.logger.debug("### bob: " + theirUrl + "channel/")
     # Choose inputs and change output
-    coins, change = select_coins(mymoney + 2 * fees)
-    # print ("coins: " + coins + ", change: ") 
-    pubkey = get_pubkey()
-    # print ("pubkey: " + pubkey)
+    my_coins, my_change = select_outputs(my_money + 2 * fees)
+    g.logger.debug("### my_coins: " + str(my_coins)) 
+    g.logger.debug("### my_change: " + str(my_change))
+    my_pubkey = get_pubkey()
+    g.logger.debug("### my_pubkey: " + str(my_pubkey))
     my_out_addr = g.bit.getnewaddress()
-    # print ("my out (bitcoin adddress for money when we close the channel) addr: " + my_out_addr)
-    # print ("g.addr (our lightning address: " + g.addr )
+    g.logger.debug("### my out addr, bitcoin adddress for money when we close the channel) addr: " + \
+        str(my_out_addr))
+    g.logger.debug("### g.addr, our lightning address: " + str(g.addr) )
     # Tell Bob we want to open a channel
     transaction, redeem, their_out_addr = bob.open_channel(
-        g.addr, theirmoney, mymoney, fees,
-        coins, change,
-        pubkey, my_out_addr)
+        g.addr, their_money, my_money, fees,
+        my_coins, my_change,
+        my_pubkey, my_out_addr)
     # Sign and send the anchor
+    g.logger.debug("### transaction: " + str(transaction) )
+    g.logger.debug("### redeem: " + str(redeem) )
+    g.logger.debug("### their_out_addr: " + str(their_out_addr) )
     transaction = g.bit.signrawtransaction(transaction)
+    g.logger.debug("### transaction post signing: " + str(redeem) )
+
+
+
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
     # Set up the channel in the DB
-    channel = Channel(address=url,
+    channel = Channel(address=theirUrl,
                       anchor_point=COutPoint(transaction.GetHash(), 0),
                       anchor_index=1,
                       their_sig=b'',
                       anchor_redeem=redeem,
-                      our_balance=mymoney,
+                      our_balance=my_money,
                       our_addr=my_out_addr,
-                      their_balance=theirmoney,
+                      their_balance=their_money,
                       their_addr=their_out_addr,
                      )
     # Exchange signatures for the inital commitment transaction
-    channel.their_sig = \
-        bob.update_anchor(g.addr, transaction.GetHash(),
-                          channel.signature(channel.commitment())) 
-                          # channel.signature(channel.commitment()) is our signature for the comitment
-                          # 
+    their_sig = bob.update_anchor(g.addr, transaction.GetHash(),
+                          channel.signature(channel.commitment()), my_pubkey) 
+                      # channel.signature(channel.commitment()) is our signature for the comitment
+                      # their_sig = channel.signature(channel.commitment())
+                      # channel.signature() returns 
+                      # transaction.GetHash() = TXID 
+    
+
+    # Verify Bob's signature 
+
+
+    channel.their_sig = their_sig
+           
+    
+
     database.session.add(channel)
     database.session.commit()
     # Event: channel opened
-    CHANNEL_OPENED.send('channel', address=url)
+    CHANNEL_OPENED.send('channel', address=theirUrl)
 
 def send(url, amount):
     """Send coin in the channel.
@@ -286,14 +315,14 @@ def get_address():
     return str(g.bit.getnewaddress())
 
 @REMOTE
-def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, their_pubkey, their_out_addr): # pylint: disable=too-many-arguments, line-too-long
+def open_channel(address, my_money, their_money, fees, their_coins, their_change, their_pubkey, their_out_addr): # pylint: disable=too-many-arguments, line-too-long
     """Open a payment channel."""
     # Get inputs and change output
-    coins, change = select_coins(mymoney + 2 * fees)
+    coins, change = select_outputs(my_money + 2 * fees)
     # Make the anchor script
     anchor_output_script = anchor_script(get_pubkey(), their_pubkey)
     # Construct the anchor utxo
-    payment = CMutableTxOut(mymoney + theirmoney + 2 * fees,
+    payment = CMutableTxOut(my_money + their_money + 2 * fees,
                             anchor_output_script.to_p2sh_scriptPubKey())
     # Anchor tx
     transaction = CMutableTransaction(
@@ -302,28 +331,34 @@ def open_channel(address, mymoney, theirmoney, fees, their_coins, their_change, 
     # Half-sign
     transaction = g.bit.signrawtransaction(transaction)['tx']
     # Create channel in DB
-    our_addr = g.bit.getnewaddress()
+    our_btc_addr = g.bit.getnewaddress()
     channel = Channel(address=address,
                       anchor_point=COutPoint(transaction.GetHash(), 0),
                       anchor_index=0,
                       their_sig=b'',
                       anchor_redeem=anchor_output_script,
-                      our_balance=mymoney,
+                      our_balance=my_money,
                       our_addr=our_addr,
-                      their_balance=theirmoney,
+                      their_balance=their_money,
                       their_addr=their_out_addr,
                      )
     database.session.add(channel)
     database.session.commit()
     # Event: channel opened
     CHANNEL_OPENED.send('channel', address=address)
-    return (transaction, anchor_output_script, our_addr)
+    return (transaction, anchor_output_script, our_btc_addr)
 
 @REMOTE
-def update_anchor(address, new_anchor, their_sig):
+def update_anchor(their_lightning_address, new_anchor, their_sig, their_pubkey):
     """Update the anchor txid after both have signed."""
-    channel = Channel.query.get(address)
+    channel = Channel.query.get(their_lightning_address)
+    # COoutPoint = The combination of a transaction hash and an index n into its vout ['hash', 'n']
     channel.anchor_point = COutPoint(new_anchor, channel.anchor_point.n)
+    
+    # g.logger.debug("### verifying signature in update_anchor" )
+    # comitment_to_verify = getcommitmenttransactions(their_lightning_address)
+    # VerifyScript(their_sig, their_pubkey, comitment_to_verify, 0, (SCRIPT_VERIFY_P2SH,))
+
     channel.their_sig = their_sig
     database.session.commit()
     return channel.signature(channel.commitment())

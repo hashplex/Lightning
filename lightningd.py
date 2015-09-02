@@ -16,6 +16,7 @@ Command line options take precedence over configuration file options.
 Flag options can be turned off by prefixing with 'no' (Ex: -nodaemon).
 """
 
+import logging
 import argparse
 import config
 import os
@@ -107,6 +108,12 @@ if __name__ == '__main__':
     app.register_blueprint(channel.API)
     app.register_blueprint(lightning.API)
     app.register_blueprint(local.API)
+
+    handler = logging.StreamHandler() 
+    handler.setLevel(logging.DEBUG)
+    app.logger.addHandler(handler)
+    app.logger.setLevel(logging.DEBUG)
+    app.logger.debug("i'm logging!")
 
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False,
             processes=3)
