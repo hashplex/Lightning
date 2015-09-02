@@ -42,6 +42,7 @@ class TestChannel(unittest.TestCase):
         self.alice.lit.create(self.bob.lurl, 50000000, 25000000)
 
         self.alice.lightning.print_log()
+        self.bob.lightning.print_log()
 
         self.propagate()
         # There are some fees associated with opening a channel
