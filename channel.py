@@ -44,7 +44,6 @@ import jsonrpcproxy
 from serverutil import api_factory
 from serverutil import database
 from serverutil import ImmutableSerializableType, Base58DataType
-import binascii
 
 API, REMOTE, Model = api_factory('channel')
 
@@ -110,8 +109,7 @@ class Channel(Model):
         """Signature for a transaction."""
         sighash = SignatureHash(CScript(self.anchor_redeem),
                                 transaction, 0, SIGHASH_ALL)
-        sig = g.seckey.sign(sighash)                                     
-        sig = sig + bytes([SIGHASH_ALL])
+        sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL]) 
         return sig
 
     def sign(self, transaction):
