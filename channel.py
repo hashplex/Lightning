@@ -104,7 +104,6 @@ class Channel(object):
     def __init__(self, address):
         self.address = address
         self.state = 'begin'
-        self.deferred = collections.deque()
         self.anchor = CMutableTxIn()
         self.our = CMutableTxOut()
         self.their = CMutableTxOut()
@@ -151,17 +150,45 @@ class Channel(object):
         sig = self.private_key.sign(sighash) + bytes([SIGHASH_ALL])
         return sig
 
+    def unsigned_settlement(self):
+        """Generate the settlement transaction."""
+        # Put outputs in the order of the inputs, so that both versions are the same
+        if self.anchor.scriptSig.my_index == 0:
+            transaction = CMutableTransaction([self.anchor], [self.our, self.their])
+        elif self.anchor.scriptSig.my_index == 1:
+            transaction = CMutableTransaction([self.anchor], [self.their, self.our])
+        else:
+            raise Exception("Unknown index", self.anchor.scriptSig.my_index)
+        return CMutableTransaction.from_tx(transaction)
+
+    def settlement_sig(self):
+        """Generate a signature for the settlement transaction."""
+        transaction = self.unsigned_settlement()
+        transaction.vin[0].scriptSig = transaction.vin[0].scriptSig.to_script()
+        for tx_out in transaction.vout:
+            tx_out.scriptPubKey = tx_out.scriptPubKey.to_scriptPubKey()
+        sighash = SignatureHash(self.anchor.scriptSig.redeem, transaction, 0, SIGHASH_ALL)
+        sig = self.private_key.sign(sighash) + bytes([SIGHASH_ALL])
+        return sig
+
+    def signed_settlement(self, their_sig):
+        """Return the fully signed settlement transaction."""
+        transaction = self.unsigned_settlement()
+        for tx_out in transaction.vout:
+            tx_out.scriptPubKey = tx_out.scriptPubKey.to_scriptPubKey()
+        sighash = SignatureHash(self.anchor.scriptSig.redeem, transaction, 0, SIGHASH_ALL)
+        sig = self.private_key.sign(sighash) + bytes([SIGHASH_ALL])
+        transaction.vin[0].scriptSig.sig = their_sig
+        transaction.vin[0].scriptSig = transaction.vin[0].scriptSig.to_script(sig)
+        #VerifyScript(transaction.vin[0].scriptSig,
+        #             self.anchor.scriptSig.redeem.to_p2sh_scriptPubKey(),
+        #             transaction, 0, (SCRIPT_VERIFY_P2SH,))
+        return transaction
+
     def handle(self, task):
         """Handle one task (input event for the state machine)."""
         name, args, kwargs = task
         self.table[name](self, *args, **kwargs)
-        while self.state == 'normal' and self.deferred:
-            name, args, kwargs = self.deferred.popleft()
-            self.table[name](self, *args, **kwargs)
-
-    def defer(self, task):
-        """Record a task to be done when back in normal state."""
-        self.deferred.append(task)
 
     @table.add('pkt_error')
     def error(self, error_msg):
@@ -223,7 +250,8 @@ class Channel(object):
         self.bitcoind.sendrawtransaction(transaction)
         self.their.scriptPubKey = their_addr
         self.anchor.scriptSig = AnchorScriptSig(1, b'', redeem)
-        self.bob.update_anchor(transaction.GetHash(), self.sig_for_them())
+        self.anchor.prevout = CMutableOutPoint(transaction.GetHash(), 0)
+        self.bob.update_anchor(self.anchor.prevout.hash, self.sig_for_them())
         self.state = 'open_wait_2'
 
     @table.add('pkt_update_anchor')
@@ -246,9 +274,72 @@ class Channel(object):
         self.state = 'normal'
 
     @table.add('cmd_send')
-    def send(self, amount):
+    def send(self, cmd_id, amount):
         """Send amount satoshis."""
         assert self.state == 'normal'
+        self.cmd_id = cmd_id
+        self.bob.update(amount)
+        self.state = 'send_wait_1'
+
+    @table.add('pkt_update')
+    def update(self, amount):
+        """Return a signature for the update."""
+        assert self.state == 'normal'
+        assert amount >= 0
+        self.our.nValue -= amount
+        self.their.nValue += amount
+        sig = self.sig_for_them()
+        self.our.nValue += amount
+        self.their.nValue -= amount
+        self.bob.update_accept(amount, sig)
+        self.state = 'send_wait_1.5'
+
+    @table.add('pkt_update_accept')
+    def update_accept(self, amount, sig):
+        """Recieve a new signature from Bob."""
+        assert self.state == 'send_wait_1'
+        self.our.nValue -= amount
+        self.their.nValue += amount
+        self.anchor.scriptSig.sig = sig
+        self.bob.update_signature(amount, self.sig_for_them())
+        cmd_complete.send(self.cmd_id)
+        self.cmd_id = None
+        self.state = 'normal'
+
+    @table.add('pkt_update_signature')
+    def update_signature(self, amount, sig):
+        """Recieve a new signature."""
+        assert self.state == 'send_wait_1.5'
+        assert amount >= 0
+        self.our.nValue += amount
+        self.their.nValue -= amount
+        self.anchor.scriptSig.sig = sig
+        self.state = 'normal'
+
+    @table.add('cmd_close')
+    def close_command(self, cmd_id):
+        """Cooperatively close the channel."""
+        assert self.state == 'normal'
+        self.cmd_id = cmd_id
+        self.bob.close(self.settlement_sig())
+        self.state = 'close_wait_1'
+
+    @table.add('pkt_close')
+    def close_packet(self, sig):
+        """Finish closing the channel."""
+        assert self.state == 'normal'
+        transaction = self.signed_settlement(sig)
+        self.bitcoind.sendrawtransaction(transaction)
+        self.bob.close_ack()
+        self.state = 'end'
+
+    @table.add('pkt_close_ack')
+    def close_ack(self):
+        """Confirm the close."""
+        assert self.state == 'close_wait_1'
+        cmd_complete.send(self.cmd_id)
+        self.cmd_id = None
+        self.state = 'end'
 
 def task_handler(database, bitcoind_address, local_address):
     """Task handler thread main function."""
@@ -347,22 +438,33 @@ def create(address, my_money, their_money):
 
 def send(address, amount):
     """Send money."""
-    #logger.debug("Create %s %d %d", address, my_money, their_money)
-    #cmd_id = get_uid()
-    #complete_event = threading.Event()
-    #def complete(dummy_id, **dummy_args):
-    #    """Unblock."""
-    #    complete_event.set()
-    #cmd_complete.connect(complete, sender=cmd_id)
-    #task_error.connect(complete)
+    logger.debug("Send %s %d", address, amount)
+    cmd_id = get_uid()
+    complete_event = threading.Event()
+    def complete(dummy_id, **dummy_args):
+        """Unblock."""
+        complete_event.set()
+    cmd_complete.connect(complete, sender=cmd_id)
+    task_error.connect(complete)
     tasks.put((address, ('cmd_send', (cmd_id, amount), {})))
-    #complete_event.wait()
-    #if not current_app.config['channel_task_thread'].is_alive():
-    #    raise Exception("Error creating channel")
+    complete_event.wait()
+    if not current_app.config['channel_task_thread'].is_alive():
+        raise Exception("Error sending money")
 
 def close(address):
     """Close the channel."""
-    tasks.put((address, ('cmd_close', (get_uid(),), {})))
+    logger.debug("Close %s", address)
+    cmd_id = get_uid()
+    complete_event = threading.Event()
+    def complete(dummy_id, **dummy_args):
+        """Unblock."""
+        complete_event.set()
+    cmd_complete.connect(complete, sender=cmd_id)
+    task_error.connect(complete)
+    tasks.put((address, ('cmd_close', (cmd_id,), {})))
+    complete_event.wait()
+    if not current_app.config['channel_task_thread'].is_alive():
+        raise Exception("Error closing")
 
 def getbalance(address):
     """Get a balance."""
