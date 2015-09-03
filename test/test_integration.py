@@ -39,10 +39,11 @@ class TestChannel(unittest.TestCase):
     def test_basic(self):
         """Test basic operation of a payment channel."""
         # Open a channel between Alice and Bob
-        self.alice.lit.create(self.bob.lurl, 50000000, 25000000)
-
-        self.alice.lightning.print_log()
-        self.bob.lightning.print_log()
+        try: 
+            self.alice.lit.create(self.bob.lurl, 50000000, 25000000)    
+        finally: 
+            self.alice.lightning.print_log()
+            self.bob.lightning.print_log()            
 
         self.propagate()
         # There are some fees associated with opening a channel
