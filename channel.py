@@ -240,6 +240,11 @@ class Channel(object):
         self.cmd_id = None
         self.state = 'normal'
 
+    @table.add('cmd_send')
+    def send(self, amount):
+        """Send amount satoshis."""
+        assert self.state == 'normal'
+
 def task_handler(database, bitcoind_address, local_address):
     """Task handler thread main function."""
     logger.debug("Starting task handler.")
@@ -330,18 +335,18 @@ def create(address, my_money, their_money):
 
 def send(address, amount):
     """Send money."""
-    logger.debug("Create %s %d %d", address, my_money, their_money)
-    cmd_id = get_uid()
-    complete_event = threading.Event()
-    def complete(dummy_id, **dummy_args):
-        """Unblock."""
-        complete_event.set()
-    cmd_complete.connect(complete, sender=cmd_id)
-    task_error.connect(complete)
+    #logger.debug("Create %s %d %d", address, my_money, their_money)
+    #cmd_id = get_uid()
+    #complete_event = threading.Event()
+    #def complete(dummy_id, **dummy_args):
+    #    """Unblock."""
+    #    complete_event.set()
+    #cmd_complete.connect(complete, sender=cmd_id)
+    #task_error.connect(complete)
     tasks.put((address, ('cmd_send', (cmd_id, amount), {})))
-    complete_event.wait()
-    if not current_app.config['channel_task_thread'].is_alive():
-        raise Exception("Error creating channel")
+    #complete_event.wait()
+    #if not current_app.config['channel_task_thread'].is_alive():
+    #    raise Exception("Error creating channel")
 
 def close(address):
     """Close the channel."""

@@ -21,6 +21,8 @@ import os.path
 import json
 import hashlib
 from flask import request, current_app, g
+#sub out bitcoin.core.key
+import key # pylint: disable=unused-import
 import bitcoin.rpc
 from bitcoin.wallet import CBitcoinSecret
 from serverutil import app
