@@ -33,7 +33,7 @@ commitment: your commitment transaction
 from sqlalchemy import Column, Integer, String, LargeBinary
 from flask import g
 from blinker import Namespace
-from bitcoin.core import b2x, COutPoint, CMutableTxOut, CMutableTxIn
+from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn
 from bitcoin.core import CMutableTransaction
 from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
 from bitcoin.core.script import CScript, SignatureHash, SIGHASH_ALL
@@ -109,7 +109,7 @@ class Channel(Model):
         """Signature for a transaction."""
         sighash = SignatureHash(CScript(self.anchor_redeem),
                                 transaction, 0, SIGHASH_ALL)
-        sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL]) 
+        sig = g.seckey.sign(sighash) + bytes([SIGHASH_ALL])
         return sig
 
     def sign(self, transaction):
@@ -149,15 +149,16 @@ class Channel(Model):
             raise Exception("Unknown index", self.anchor_index)
         return CMutableTransaction([CMutableTxIn(self.anchor_point)],
                                    [first, second])
-    
-    def commitmentsighash(self, ours=True): 
+
+    def commitmentsighash(self, ours=True):
+        """Generate the sighash for the most recent comitment"""
         commit_tx = self.commitment(ours)
         # should just be one anchor redeem -- redeem script the same for everyone
-        sighash = SignatureHash(CScript(self.anchor_redeem), 
-                                    commit_tx, 0, SIGHASH_ALL)
+        sighash = SignatureHash(CScript(self.anchor_redeem),
+                                commit_tx, 0, SIGHASH_ALL)
         return sighash
 
-def select_outputs(amount):
+def select_coins(amount):
     """Get a txin set and change to spend amount."""
     coins = g.bit.listunspent()
     out = []
@@ -185,31 +186,30 @@ def get_pubkey():
 
 def update_db(address, amount, sig):
     """Update the db for a payment."""
-    channel = Channel.query.get(address) # address is lightning address, address is primary key 
-    
-    # need to make sure we update balances prior to checking signatures 
+    channel = Channel.query.get(address) # address is lightning address, address is primary key
+    # need to make sure we update balances prior to checking signatures
     # (so that we get the right sighash)
     channel.our_balance += amount
     channel.their_balance -= amount
     # make sure we have a valid signature from our counterparty before updating accounts
-    verify_commitment_signature(CPubKey(channel.their_pubkey), 
-        channel.commitmentsighash(), sig)
+    verify_commitment_signature(CPubKey(channel.their_pubkey),
+                                channel.commitmentsighash(), sig)
     channel.their_sig = sig
     database.session.commit()
-    return channel.signature(channel.commitment()) # this is our signature of the comittment 
+    return channel.signature(channel.commitment()) # this is our signature of the comittment
 
-def create(theirUrl, my_money, their_money, fees=10000):
+def create(their_url, my_money, their_money, fees=10000):
     """Open a payment channel.
 
     After this method returns, a payment channel will have been established
-    with the node identified by theirUrl, in which you can send my_money satoshis
+    with the node identified by their_url, in which you can send my_money satoshis
     and recieve their_money satoshis. Any blockchain fees involved in the
     setup and teardown of the channel should be collected at this time.
     """
-    bob = jsonrpcproxy.Proxy(theirUrl+'channel/')
-    # g.logger.debug("### creating channel with bob: " + theirUrl + "channel/")
+    bob = jsonrpcproxy.Proxy(their_url+'channel/')
+    # g.logger.debug("### creating channel with bob: " + their_url + "channel/")
     # Choose inputs and change output
-    my_coins, my_change = select_outputs(my_money + 2 * fees)
+    my_coins, my_change = select_coins(my_money + 2 * fees)
     my_pubkey = get_pubkey()
     my_out_addr = g.bit.getnewaddress()
     # Tell Bob we want to open a channel
@@ -219,12 +219,12 @@ def create(theirUrl, my_money, their_money, fees=10000):
         my_pubkey, my_out_addr)
     # Sign and send the anchor
     transaction = g.bit.signrawtransaction(transaction)
-    
+
     assert transaction['complete']
     transaction = transaction['tx']
     g.bit.sendrawtransaction(transaction)
     # Set up the channel in the DB
-    channel = Channel(address=theirUrl,
+    channel = Channel(address=their_url,
                       anchor_point=COutPoint(transaction.GetHash(), 0),
                       anchor_index=1,
                       their_sig=b'',
@@ -237,22 +237,18 @@ def create(theirUrl, my_money, their_money, fees=10000):
                       my_pubkey=my_pubkey,
                      )
     # Exchange signatures for the inital commitment transaction
-    their_lightning_address = g.addr
-    # get the hash of everything including scripsigs (which are nullified in sighash) 
-    new_anchor = transaction.GetHash() # also the TXID
-    channelcommit = channel.commitment()
-    channelcommitsig = channel.signature(channelcommit)
-    # channel.anchor = input to comitment transaction spending the anchor transaction 
-    their_sig = bob.update_anchor(their_lightning_address, new_anchor,
-                          channelcommitsig, my_pubkey) 
-    # Verify Bob's signature 
-    verify_commitment_signature(CPubKey(their_pubkey), 
-        channel.commitmentsighash(), their_sig)
+    # get the hash of everything including scripsigs (which are nullified in sighash)
+    # g.addr (our lightning addr), transaction.GetHash() (the TXID)
+    their_sig = bob.update_anchor(g.addr, transaction.GetHash(),
+                                  channel.signature(channel.commitment()), my_pubkey)
+    # Verify Bob's signature
+    verify_commitment_signature(CPubKey(their_pubkey),
+                                channel.commitmentsighash(), their_sig)
     channel.their_sig = their_sig
     database.session.add(channel)
     database.session.commit()
     # Event: channel opened
-    CHANNEL_OPENED.send('channel', address=theirUrl)
+    CHANNEL_OPENED.send('channel', address=their_url)
 
 def send(url, amount):
     """Send coin in the channel.
@@ -294,15 +290,15 @@ def close(url):
     database.session.delete(channel)
     database.session.commit()
 
-def verify_commitment_signature(pubkey, sighash, signature): 
+def verify_commitment_signature(pubkey, sighash, signature):
     """Verify that an updated commitment has been signed by our counterpaty"""
     # recovered_pubkey = CPubKey.recover_compact(sighash, signature) # need updated bitcoin lib
     pubkey = CPubKey(pubkey)
-    if not pubkey.verify(sighash, signature): 
+    if not pubkey.verify(sighash, signature):
         raise Exception("invalid comitment signature for transaction: " + str(sighash))
-    else: 
+    else:
         # g.logger.debug("comitment signature verified for comitment with sighash: " + str(sighash))
-        return True     
+        return True
 
 @REMOTE
 def info():
@@ -315,10 +311,10 @@ def get_address():
     return str(g.bit.getnewaddress())
 
 @REMOTE
-def open_channel(address, my_money, their_money, fees, their_coins, their_change, their_pubkey, their_out_addr): # pylint: disable=too-many-arguments, line-too-long
+def open_channel(address, my_money, their_money, fees, their_coins, their_change, their_pubkey, their_out_addr): # pylint: disable=too-many-arguments, line-too-long, too-many-locals
     """Open a payment channel."""
     # Get inputs and change output
-    coins, change = select_outputs(my_money + 2 * fees)
+    coins, change = select_coins(my_money + 2 * fees)
     # Make the anchor script
     my_pubkey = get_pubkey()
     anchor_output_script = anchor_script(my_pubkey, their_pubkey)
@@ -367,7 +363,7 @@ def propose_update(address, amount):
     """Sign commitment transactions."""
     channel = Channel.query.get(address)
     assert amount > 0
-    # need to decrement to generate commitment 
+    # need to decrement to generate commitment
     channel.our_balance += amount
     channel.their_balance -= amount
     # don't persist yet

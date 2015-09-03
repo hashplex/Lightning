@@ -109,7 +109,7 @@ if __name__ == '__main__':
     app.register_blueprint(lightning.API)
     app.register_blueprint(local.API)
 
-    handler = logging.StreamHandler() 
+    handler = logging.StreamHandler()
     handler.setLevel(logging.DEBUG)
     app.logger.addHandler(handler)
     app.logger.setLevel(logging.DEBUG)
