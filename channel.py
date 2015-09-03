@@ -163,6 +163,11 @@ class Channel(object):
         """Record a task to be done when back in normal state."""
         self.deferred.append(task)
 
+    @table.add('pkt_error')
+    def error(self, error_msg):
+        """Deal with an error from counterparty."""
+        raise Exception("Counterparty sent error: %s" % error_msg)
+
     @table.add('cmd_open')
     def open(self, cmd_id, my_money, their_money, fees=10000):
         """Start the opening process."""
@@ -183,7 +188,7 @@ class Channel(object):
                      their_change, their_pubkey, their_addr):
         """Respond to a requested open."""
         assert self.state == 'begin'
-         # Get inputs and change output
+        # Get inputs and change output
         coins, change = self.select_coins(my_money + 2 * fees)
         # Make the anchor script
         anchor_output_script = self.anchor_script(self.private_key.pub, their_pubkey)
@@ -266,7 +271,14 @@ def task_handler(database, bitcoind_address, local_address):
             channel = pickle.loads(database.Get(key))
         except KeyError:
             channel = Channel(address)
-        channel.handle(task)
+        try:
+            channel.handle(task)
+        except:
+            logger.exception("Error handling task %s for %s", task, address)
+            try:
+                channel.bob.error("An unexpected error occured, I'm dying")
+            finally:
+                raise
         database.Put(key, pickle.dumps(channel))
 
 API = Blueprint('channel', __name__, url_prefix='/channel')
