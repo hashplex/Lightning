@@ -113,7 +113,7 @@ if __name__ == '__main__':
     handler.setLevel(logging.DEBUG)
     app.logger.addHandler(handler)
     app.logger.setLevel(logging.DEBUG)
-    app.logger.debug("i'm logging!")
+    # app.logger.debug("i'm logging!")
 
     app.run(port=port, debug=conf.getboolean('debug'), use_reloader=False,
             processes=3)

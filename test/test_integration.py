@@ -54,8 +54,10 @@ class TestChannel(unittest.TestCase):
         # (Balance) Alice: 0.50 BTC, Bob: 0.25 BTC
         self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 50000000)
         self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 25000000)
+        
         # Bob sends Alice 0.05 BTC
         self.bob.lit.send(self.alice.lurl, 5000000)
+        
         # (Balance) Alice: 0.55 BTC, Bob: 0.20 BTC
         self.assertEqual(self.alice.lit.getbalance(self.bob.lurl), 55000000)
         self.assertEqual(self.bob.lit.getbalance(self.alice.lurl), 20000000)
