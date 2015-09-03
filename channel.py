@@ -150,6 +150,21 @@ class Channel(object):
         sig = self.private_key.sign(sighash) + bytes([SIGHASH_ALL])
         return sig
 
+    def signed_commitment(self):
+        """Return the fully signed commitment transaction."""
+        transaction = CMutableTransaction([self.anchor], [self.our, self.their])
+        transaction = CMutableTransaction.from_tx(transaction)
+        for tx_out in transaction.vout:
+            tx_out.scriptPubKey = tx_out.scriptPubKey.to_scriptPubKey()
+        sighash = SignatureHash(self.anchor.scriptSig.redeem, transaction, 0, SIGHASH_ALL)
+        sig = self.private_key.sign(sighash) + bytes([SIGHASH_ALL])
+        transaction.vin[0].scriptSig = transaction.vin[0].scriptSig.to_script(sig)
+        # verify signing worked
+        VerifyScript(transaction.vin[0].scriptSig,
+                     self.anchor.scriptSig.redeem.to_p2sh_scriptPubKey(),
+                     transaction, 0, (SCRIPT_VERIFY_P2SH,))
+        return transaction
+
     def unsigned_settlement(self):
         """Generate the settlement transaction."""
         # Put outputs in the order of the inputs, so that both versions are the same
@@ -180,9 +195,9 @@ class Channel(object):
         sig = self.private_key.sign(sighash) + bytes([SIGHASH_ALL])
         transaction.vin[0].scriptSig.sig = their_sig
         transaction.vin[0].scriptSig = transaction.vin[0].scriptSig.to_script(sig)
-        #VerifyScript(transaction.vin[0].scriptSig,
-        #             self.anchor.scriptSig.redeem.to_p2sh_scriptPubKey(),
-        #             transaction, 0, (SCRIPT_VERIFY_P2SH,))
+        VerifyScript(transaction.vin[0].scriptSig,
+                     self.anchor.scriptSig.redeem.to_p2sh_scriptPubKey(),
+                     transaction, 0, (SCRIPT_VERIFY_P2SH,))
         return transaction
 
     def handle(self, task):
@@ -478,4 +493,4 @@ def getcommitmenttransactions(address):
     database = current_app.config['channel_database']
     key = address.encode('utf-8')
     channel = pickle.loads(database.Get(key))
-    return []
+    return [channel.signed_commitment(),]
