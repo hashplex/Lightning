@@ -160,6 +160,13 @@ class Channel(Model):
             raise Exception("Unknown index", self.anchor_index)
         return CMutableTransaction([CMutableTxIn(self.anchor_point)],
                                    [first, second])
+    
+    def commitmentsighash(self, ours=True): 
+        commit_tx = self.commitment(ours)
+        # should just be one anchor redeem -- redeem script the same for everyone
+        sighash = SignatureHash(CScript(self.anchor_redeem), 
+                                    commit_tx, 0, SIGHASH_ALL)
+        return sighash
 
 def select_outputs(amount):
     """Get a txin set and change to spend amount."""
@@ -191,8 +198,9 @@ def update_db(address, amount, sig):
     """Update the db for a payment."""
     channel = Channel.query.get(address) # address is lightning address, address is primary key 
     
-    # verify that signature is valid here 
-
+    # make sure we have a valid signature from our counterparty before updating accounts
+    verify_commitment_signature(CPubKey(channel.their_pubkey), 
+        channel.commitmentsighash(), sig)
     channel.our_balance += amount
     channel.their_balance -= amount
     channel.their_sig = sig
@@ -211,27 +219,25 @@ def create(theirUrl, my_money, their_money, fees=10000):
     g.logger.debug("### bob: " + theirUrl + "channel/")
     # Choose inputs and change output
     my_coins, my_change = select_outputs(my_money + 2 * fees)
-    g.logger.debug("### my_coins: " + str(my_coins)) 
-    g.logger.debug("### my_change: " + str(my_change))
+    # g.logger.debug("### my_coins: " + str(my_coins)) 
+    # g.logger.debug("### my_change: " + str(my_change))
     my_pubkey = get_pubkey()
-    g.logger.debug("### my_pubkey: " + str(my_pubkey))
+    # g.logger.debug("### my_pubkey: " + str(my_pubkey))
     my_out_addr = g.bit.getnewaddress()
-    g.logger.debug("### my out addr, bitcoin adddress for money when we close the channel) addr: " + 
-        str(my_out_addr))
-    g.logger.debug("### g.addr, our lightning address: " + str(g.addr) )
+    # g.logger.debug("### my out addr, bitcoin adddress for money when we close the channel) addr: " + 
+        # str(my_out_addr))
+    # g.logger.debug("### g.addr, our lightning address: " + str(g.addr) )
     # Tell Bob we want to open a channel
     transaction, redeem, their_out_addr, their_pubkey = bob.open_channel(
         g.addr, their_money, my_money, fees,
         my_coins, my_change,
         my_pubkey, my_out_addr)
     # Sign and send the anchor
-    g.logger.debug("### transaction: " + str(transaction) )
-    g.logger.debug("### redeem: " + str(redeem) )
-    g.logger.debug("### their_out_addr: " + str(their_out_addr) )
+    # g.logger.debug("### transaction: " + str(transaction) )
+    # g.logger.debug("### redeem: " + str(redeem) )
+    # g.logger.debug("### their_out_addr: " + str(their_out_addr) )
     transaction = g.bit.signrawtransaction(transaction)
     g.logger.debug("### transaction post signing: " + str(redeem) )
-
-
 
     assert transaction['complete']
     transaction = transaction['tx']
@@ -278,11 +284,15 @@ def create(theirUrl, my_money, their_money, fees=10000):
 
     # Verify Bob's signature 
     g.logger.debug("### verifying Bob's signature: \n")
-    commit_tx = channel.commitment(ours=True)
-    # should just be one anchor redeem -- redeem script the same for everyone
-    sighash = SignatureHash(CScript(channel.anchor_redeem), 
-                                commit_tx, 0, SIGHASH_ALL)
-    verify_commitment_signature(CPubKey(their_pubkey), sighash, their_sig)
+    
+    # commit_tx = channel.commitment(ours=True)
+    # # should just be one anchor redeem -- redeem script the same for everyone
+    # sighash = SignatureHash(CScript(channel.anchor_redeem), 
+    #                             commit_tx, 0, SIGHASH_ALL)
+
+    verify_commitment_signature(CPubKey(their_pubkey), 
+        channel.commitmentsighash(), their_sig)
+
     g.logger.debug("### SUCCESS: verified bob's signature \n")
 
     channel.their_sig = their_sig
@@ -333,9 +343,8 @@ def close(url):
 
 def verify_commitment_signature(pubkey, sighash, signature): 
     """Verify that an updated commitment has been signed by our counterpaty"""
-
     # recovered_pubkey = CPubKey.recover_compact(sighash, signature)
-
+    pubkey = CPubKey(pubkey)
     if not pubkey.verify(sighash, signature): 
         raise Exception("invalid comitment signature for transaction: " + str(sighash))
     else: 
@@ -399,19 +408,25 @@ def update_anchor(their_lightning_address, new_anchor, their_sig, their_pubkey):
     
     # g.logger.debug("### verifying signature in update_anchor") 
     # g.logger.debug("### their lighthning address:\n" + str(their_lightning_address) )
-    commit_tx = channel.commitment(ours=True)
-    sighash = SignatureHash(CScript(channel.anchor_redeem),
-                                commit_tx, 0, SIGHASH_ALL)
-    g.logger.debug("bob about to verify pubkey: " + str(their_pubkey))
-    their_pubkey = CPubKey(their_pubkey)
-    g.logger.debug("converted pubkey: " + str(their_pubkey))
-    verify_commitment_signature(their_pubkey, sighash, their_sig)
+    
+    # sighash = commitmentsighash()
 
-    g.logger.debug("")
+    # commit_tx = channel.commitment(ours=True)
+    # sighash = SignatureHash(CScript(channel.anchor_redeem),
+    #                             commit_tx, 0, SIGHASH_ALL)
+    # g.logger.debug("first sighash: " + str(sighash))    
+    # sighash = channel.commitmentsighash()
+    # g.logger.debug("second sighash: " + str(sighash))
+
+    # g.logger.debug("bob about to verify pubkey: " + str(their_pubkey))
+    # their_pubkey = CPubKey(their_pubkey)
+    # g.logger.debug("converted pubkey: " + str(their_pubkey))
+
+    verify_commitment_signature(their_pubkey, channel.commitmentsighash(), their_sig)
+    # verify_commitment_signature(their_pubkey, sighash, their_sig)
+
     channel.their_sig = their_sig
-    g.logger.debug("about to do db commit")
     database.session.commit()
-    g.logger.debug("bob2")
     return channel.signature(channel.commitment())
 
 @REMOTE
