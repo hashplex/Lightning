@@ -198,11 +198,13 @@ def update_db(address, amount, sig):
     """Update the db for a payment."""
     channel = Channel.query.get(address) # address is lightning address, address is primary key 
     
+    # need to make sure we update balances prior to checking signatures 
+    # (so that we get the right sighash)
+    channel.our_balance += amount
+    channel.their_balance -= amount
     # make sure we have a valid signature from our counterparty before updating accounts
     verify_commitment_signature(CPubKey(channel.their_pubkey), 
         channel.commitmentsighash(), sig)
-    channel.our_balance += amount
-    channel.their_balance -= amount
     channel.their_sig = sig
     database.session.commit()
     return channel.signature(channel.commitment()) # this is our signature of the comittment 
@@ -434,6 +436,7 @@ def propose_update(address, amount):
     """Sign commitment transactions."""
     channel = Channel.query.get(address)
     assert amount > 0
+    # need to decrement to generate commitment 
     channel.our_balance += amount
     channel.their_balance -= amount
     # don't persist yet
